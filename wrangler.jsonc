@@ -1,0 +1,22 @@
+// Cloudflare Workers 部署配置（静态资源 + /api 一体化）
+// 部署步骤见 README.md「部署」一节。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "huahuacai",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-05-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // SPA 路由（react-router）回退到 index.html
+    "not_found_handling": "single-page-application"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "ROOMS",
+      // 部署前先执行: npx wrangler kv namespace create ROOMS
+      // 然后把下面替换为命令输出的 id
+      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+    }
+  ]
+}

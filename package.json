@@ -1,0 +1,28 @@
+{
+  "name": "huahuacai",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "多人协作拼图绘画应用：四人各画一格，拼合揭晓",
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"node server/mock-server.js\" \"vite\"",
+    "dev:web": "vite",
+    "dev:api": "node server/mock-server.js",
+    "build": "vite build",
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke.mjs",
+    "deploy": "npm run build && npx -y wrangler deploy"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.1.2",
+    "tailwindcss": "^4.1.8",
+    "vite": "^7.0.0"
+  }
+}

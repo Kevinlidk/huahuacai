@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.local
+.DS_Store
+.mimosa/
+
+# 仅本地保留，不上传 GitHub
+多人协作拼图绘画应用实现计划.md
+FEASIBILITY.md

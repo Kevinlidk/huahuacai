@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* 揭晓信封动画 */
+@keyframes hhc-rise {
+  from {
+    transform: translateY(48px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes hhc-flap {
+  0% {
+    transform: rotateX(0deg);
+  }
+  100% {
+    transform: rotateX(180deg);
+  }
+}
+
+@keyframes hhc-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.hhc-rise {
+  animation: hhc-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s both;
+}
+
+.hhc-flap {
+  transform-origin: top;
+  transform-style: preserve-3d;
+  animation: hhc-flap 0.5s ease-in forwards;
+}
+
+.hhc-pop {
+  animation: hhc-pop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
