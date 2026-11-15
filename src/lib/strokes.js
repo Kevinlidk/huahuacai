@@ -49,32 +49,67 @@ export function clearCanvas(ctx, w, h) {
   ctx.restore();
 }
 
-// 把 4 个画板合成一张 2x2 拼图
-export function composeReveal(canvases) {
-  const cell = 800;
+// N 人拼图布局：cols = ceil(sqrt(N))，末行不满时格子等分拉宽
+export function gridLayout(playerCount) {
+  const n = Math.max(1, playerCount || 1);
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  return { n, cols, rows };
+}
+
+// 第 id 块画板的宽高比（末行更少格子时格子更宽）
+export function cellAspect(playerCount, id) {
+  const { cols, rows } = gridLayout(playerCount);
+  const k = id - (rows - 1) * cols; // 该格在末行中的序号（1..k）
+  if (k > 0) return cols / k; // 末行：宽度 = 总宽/末行格数
+  return 1;
+}
+
+// 把 N 个画板合成一张拼图（布局与 gridLayout 一致）
+export function composeReveal(canvases, playerCount = 4) {
+  const { n, cols, rows } = gridLayout(playerCount);
+  const cell = 800; // 基准格高
+  const width = cols * cell;
+  const height = rows * cell;
   const out = document.createElement('canvas');
-  out.width = cell * 2;
-  out.height = cell * 2;
+  out.width = width;
+  out.height = height;
   const ctx = out.getContext('2d');
-  for (const n of [1, 2, 3, 4]) {
-    const x = ((n - 1) % 2) * cell;
-    const y = n <= 2 ? 0 : cell;
+
+  const rects = [];
+  for (let id = 1; id <= n; id++) {
+    const row = Math.floor((id - 1) / cols);
+    const k = id - row * cols; // 行内序号
+    const inLastRow = row === rows - 1;
+    const lastRowCount = n - (rows - 1) * cols;
+    const cellW = inLastRow && lastRowCount < cols ? width / lastRowCount : cell;
+    const x = (k - 1) * cellW;
+    const y = row * cell;
+    rects.push({ id, x, y, w: cellW, h: cell });
+  }
+  for (const { id, x, y, w, h } of rects) {
     ctx.save();
     ctx.translate(x, y);
-    clearCanvas(ctx, cell, cell);
-    const data = canvases?.[String(n)];
-    if (data?.strokes) drawStrokes(ctx, data.strokes, cell, cell);
+    clearCanvas(ctx, w, h);
+    const data = canvases?.[String(id)];
+    if (data?.strokes) drawStrokes(ctx, data.strokes, w, h);
     ctx.restore();
   }
-  // 十字分隔线：空白格也能看出拼图分界
+  // 分隔线：横线整幅、竖线只画本行内部边界（末行格宽与上行不同）
   ctx.save();
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.moveTo(cell, 0);
-  ctx.lineTo(cell, cell * 2);
-  ctx.moveTo(0, cell);
-  ctx.lineTo(cell * 2, cell);
+  for (let r = 1; r < rows; r++) {
+    ctx.moveTo(0, r * cell);
+    ctx.lineTo(width, r * cell);
+  }
+  for (const rect of rects) {
+    if (rect.x > 0) {
+      ctx.moveTo(rect.x, rect.y);
+      ctx.lineTo(rect.x, rect.y + rect.h);
+    }
+  }
   ctx.stroke();
   ctx.restore();
   return out.toDataURL('image/png');

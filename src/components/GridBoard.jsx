@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { paintCell } from '../lib/strokes.js';
+import { gridLayout, paintCell } from '../lib/strokes.js';
 
 const STATUS_TEXT = {
   idle: '空闲',
@@ -40,7 +40,7 @@ function Cell({ n, canvas, playerId, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`relative aspect-square rounded-2xl border-2 transition overflow-hidden text-left ${
+      className={`relative min-w-0 flex-1 h-full rounded-2xl border-2 transition overflow-hidden text-left ${
         canvas.status === 'idle'
           ? 'border-dashed border-slate-300 bg-white/60 hover:border-sky-400 hover:bg-white'
           : 'border-transparent bg-white shadow-sm hover:shadow-md'
@@ -70,7 +70,12 @@ function Cell({ n, canvas, playerId, onClick }) {
 }
 
 export default function GridBoard({ room, playerId, onCellClick, onReveal, onRelease, onEditName, onShowReveal }) {
-  const cells = [1, 2, 3, 4].map((n) => ({ n, canvas: room.canvases[String(n)] }));
+  const playerCount = room.playerCount || 4;
+  const { cols, rows } = gridLayout(playerCount);
+  const cells = Array.from({ length: playerCount }, (_, i) => ({
+    n: i + 1,
+    canvas: room.canvases[String(i + 1)],
+  }));
   const allDone = cells.every(({ canvas }) => canvas.status === 'done');
   const myDrawing = cells.find(({ canvas }) => canvas.status === 'drawing' && canvas.artistId === playerId);
   const myName = room.players[playerId]?.name || '';
@@ -127,16 +132,20 @@ export default function GridBoard({ room, playerId, onCellClick, onReveal, onRel
         )}
       </div>
 
-      {/* 网格尺寸自适应：取「视口宽 92%」与「可用高度」较小者，上限 860px */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 aspect-square w-[min(92vw,calc(100dvh-250px),860px)] min-w-[280px]">
-        {cells.map(({ n, canvas }) => (
-          <Cell
-            key={n}
-            n={n}
-            canvas={canvas}
-            playerId={playerId}
-            onClick={() => onCellClick(n)}
-          />
+      {/* 尺寸自适应；行布局按人数计算（cols=ceil(√N)），末行不满时格子等分拉宽 */}
+      <div className="flex flex-col gap-3 sm:gap-4 aspect-square w-[min(92vw,calc(100dvh-250px),860px)] min-w-[280px]">
+        {Array.from({ length: rows }, (_, r) => (
+          <div key={r} className="flex gap-3 sm:gap-4 flex-1 min-h-0">
+            {cells.slice(r * cols, (r + 1) * cols).map(({ n, canvas }) => (
+              <Cell
+                key={n}
+                n={n}
+                canvas={canvas}
+                playerId={playerId}
+                onClick={() => onCellClick(n)}
+              />
+            ))}
+          </div>
         ))}
       </div>
 
@@ -157,7 +166,7 @@ export default function GridBoard({ room, playerId, onCellClick, onReveal, onRel
           </button>
         ) : (
           <p className="text-sm text-slate-400">
-            已完成 {cells.filter(({ canvas }) => canvas.status === 'done').length} / 4 格
+            已完成 {cells.filter(({ canvas }) => canvas.status === 'done').length} / {playerCount} 格
             {myDrawing ? ' · 你有一格画到一半' : ' · 点空白格开始作画'}
           </p>
         )}

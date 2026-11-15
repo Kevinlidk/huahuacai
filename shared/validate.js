@@ -1,6 +1,17 @@
-// 数据校验：server（本地 mock）与 worker（线上 KV）共用，防止恶意数据注入
-export const CANVAS_IDS = [1, 2, 3, 4];
+// 数据校验：server（本地 mock/docker）与 worker（线上 KV）共用，防止恶意数据注入
 export const TOOLS = ['pen', 'eraser'];
+
+// 参与人数（= 画板数）：创建房间时指定，默认 4
+export const PLAYER_COUNT_MIN = 2;
+export const PLAYER_COUNT_MAX = 12;
+export const PLAYER_COUNT_DEFAULT = 4;
+
+export function normalizePlayerCount(v) {
+  if (v === undefined || v === null || v === '') return PLAYER_COUNT_DEFAULT;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < PLAYER_COUNT_MIN || n > PLAYER_COUNT_MAX) return null;
+  return n;
+}
 export const ROOM_ID_RE = /^[A-Z0-9]{4,6}$/;
 export const PLAYER_ID_RE = /^p_[A-Za-z0-9]{6,32}$/;
 export const MAX_STROKES = 3000; // 单画板笔触上限

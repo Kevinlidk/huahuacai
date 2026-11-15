@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { getRecentRooms, getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
+import pkg from '../../package.json';
 
 export default function Home() {
   const navigate = useNavigate();
   const [name, setName] = useState(getPlayerName());
+  const [playerCount, setPlayerCount] = useState(4);
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [recentRooms] = useState(getRecentRooms);
+
+  const setCount = (v) => setPlayerCount(Math.min(12, Math.max(2, v)));
 
   const go = (roomId) => navigate(`/room/${roomId}`);
 
@@ -18,7 +22,11 @@ export default function Home() {
     setError('');
     try {
       setPlayerName(name);
-      const data = await api.createOrJoinRoom({ playerId: getPlayerId(), playerName: name });
+      const data = await api.createOrJoinRoom({
+        playerId: getPlayerId(),
+        playerName: name,
+        playerCount,
+      });
       go(data.room.roomId);
     } catch (e) {
       setError(e.message);
@@ -57,7 +65,7 @@ export default function Home() {
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">🎨</div>
           <h1 className="text-3xl font-bold text-slate-800">拼图绘画</h1>
-          <p className="mt-2 text-slate-500">四人各画一格，拼出意外惊喜</p>
+          <p className="mt-2 text-slate-500">多人各画一格，拼出意外惊喜</p>
         </div>
 
         <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 space-y-5">
@@ -72,12 +80,35 @@ export default function Home() {
             />
           </label>
 
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-500">参与人数（每人一格）</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCount(playerCount - 1)}
+                disabled={playerCount <= 2 || busy}
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 text-lg leading-none transition"
+                aria-label="减少人数"
+              >
+                −
+              </button>
+              <span className="w-12 text-center font-bold text-slate-800">{playerCount} 人</span>
+              <button
+                onClick={() => setCount(playerCount + 1)}
+                disabled={playerCount >= 12 || busy}
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 text-lg leading-none transition"
+                aria-label="增加人数"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={create}
             disabled={busy}
             className="w-full rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-semibold py-3 transition"
           >
-            {busy ? '请稍候…' : '创建新房间'}
+            {busy ? '请稍候…' : `创建 ${playerCount} 人房间`}
           </button>
 
           <div className="flex items-center gap-3 text-slate-300 text-sm">
@@ -133,7 +164,7 @@ export default function Home() {
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          玩法：每人认领 2×2 网格中的一格作画，全部完成后拼合揭晓
+          玩法：每人认领一格作画，全部完成后拼合揭晓（{playerCount} 人房间）
           <a
             className="github-link inline-block align-[-3px] ml-1.5 text-slate-400 hover:text-slate-700 transition"
             href="https://github.com/Kevinlidk/huahuacai"
@@ -146,6 +177,9 @@ export default function Home() {
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
             </svg>
           </a>
+        </p>
+        <p className="mt-1 text-center text-[10px] text-slate-300">
+          v{pkg.version} · MIT License
         </p>
       </div>
     </main>

@@ -5,8 +5,9 @@ import { PEN_COLORS, PEN_SIZES, clearCanvas, drawStrokes, drawStroke, strokeColo
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
-// 全屏绘画层：认领后进入，绘制自己认领的那一格
-export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrokes, onClose }) {
+// 全屏绘画层：认领后进入，绘制自己认领的那一格。
+// 画布长宽比与该格在网格中的显示比例一致（aspect），保证笔迹不变形
+export default function DrawingCanvas({ roomId, canvasId, playerId, aspect = 1, initialStrokes, onClose }) {
   // initialStrokes 只在挂载时取一次，之后的差异全部由本地操作驱动
   const [strokes, setStrokes] = useState(() => [...initialStrokes]);
   const [redoStack, setRedoStack] = useState([]); // 被撤销的笔触，重做时按序放回
@@ -18,9 +19,9 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
 
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
-  const [side, setSide] = useState(0);
+  const [box, setBox] = useState({ w: 0, h: 0 }); // 画布 CSS 尺寸（按 aspect 适配容器）
   const drawnCountRef = useRef(0);
-  const lastSideRef = useRef(0);
+  const lastSizeRef = useRef({ w: 0, h: 0 });
   const currentRef = useRef(null); // 正在进行的笔触
   const drawingRef = useRef(false);
   const pendingRef = useRef([]); // 待上传笔触缓冲（批量写，省 KV 额度）
@@ -78,45 +79,53 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     [roomId, canvasId, playerId]
   );
 
-  // 容器尺寸 → 正方形边长
+  // 容器尺寸 → 按 aspect 适配的画布矩形（在容器内最大化）
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      setSide(Math.max(0, Math.floor(Math.min(rect.width, rect.height))));
+      const a = aspect >= 1 ? aspect : 1 / aspect; // 宽高比（≥1 为横向）
+      let w;
+      let h;
+      if (rect.width / rect.height >= a) {
+        h = rect.height;
+        w = h * a;
+      } else {
+        w = rect.width;
+        h = w / a;
+      }
+      setBox({ w: Math.max(0, Math.floor(w)), h: Math.max(0, Math.floor(h)) });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [aspect]);
 
   // 渲染：新笔触增量绘制；撤销/尺寸变化时全量重绘
   useEffect(() => {
     const el = canvasRef.current;
-    if (!el || side <= 0) return;
+    if (!el || box.w <= 0 || box.h <= 0) return;
     const dpr = window.devicePixelRatio || 1;
-    if (el.width !== Math.round(side * dpr)) {
-      el.width = Math.round(side * dpr);
-      el.height = Math.round(side * dpr);
+    if (el.width !== Math.round(box.w * dpr) || el.height !== Math.round(box.h * dpr)) {
+      el.width = Math.round(box.w * dpr);
+      el.height = Math.round(box.h * dpr);
     }
     const ctx = el.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (side !== lastSideRef.current) {
-      clearCanvas(ctx, side, side);
-      drawStrokes(ctx, strokes, side, side);
+    const resized =
+      box.w !== lastSizeRef.current.w || box.h !== lastSizeRef.current.h;
+    if (resized || strokes.length < drawnCountRef.current) {
+      clearCanvas(ctx, box.w, box.h);
+      drawStrokes(ctx, strokes, box.w, box.h);
       drawnCountRef.current = strokes.length;
-      lastSideRef.current = side;
-    } else if (strokes.length < drawnCountRef.current) {
-      clearCanvas(ctx, side, side);
-      drawStrokes(ctx, strokes, side, side);
-      drawnCountRef.current = strokes.length;
+      lastSizeRef.current = { ...box };
     } else {
-      drawStrokes(ctx, strokes, side, side, drawnCountRef.current);
+      drawStrokes(ctx, strokes, box.w, box.h, drawnCountRef.current);
       drawnCountRef.current = strokes.length;
     }
-  }, [strokes, side]);
+  }, [strokes, box]);
 
   const posOf = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -137,7 +146,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     const p = posOf(e);
     currentRef.current = makeStroke([p, p]); // 起笔即画一个点
     const ctx = canvasRef.current.getContext('2d');
-    drawStroke(ctx, currentRef.current, side, side);
+    drawStroke(ctx, currentRef.current, box.w, box.h);
   };
 
   const onPointerMove = (e) => {
@@ -148,7 +157,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 0.002) return; // 距离阈值去抖
     pts.push(p);
     const ctx = canvasRef.current.getContext('2d');
-    drawStroke(ctx, currentRef.current, side, side); // 实心线条重复描画无副作用
+    drawStroke(ctx, currentRef.current, box.w, box.h); // 实心线条重复描画无副作用
   };
 
   const onPointerUp = () => {
@@ -333,7 +342,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          style={{ width: side, height: side, touchAction: 'none' }}
+          style={{ width: box.w, height: box.h, touchAction: 'none' }}
           className={`bg-white border border-slate-200 rounded-lg shadow-inner ${
             tool === 'eraser' ? 'cursor-cell' : 'cursor-crosshair'
           }`}
@@ -341,7 +350,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
       </div>
 
       <p className="text-center text-xs text-slate-300 pb-2">
-        提示：其他画友可在网格页看到你的笔迹（约 1 秒同步一次）
+        提示：其他画友可在网格页实时看到你的笔迹与进度
       </p>
     </div>
   );

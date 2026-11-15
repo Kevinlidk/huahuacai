@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { addRecentRoom, getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
 import { getSyncConfig, onSyncConfigChange } from '../lib/sync-config.js';
+import { cellAspect } from '../lib/strokes.js';
 import { useRoomSync } from '../hooks/useRoomSync.js';
 import GridBoard from './GridBoard.jsx';
 import DrawingCanvas from './DrawingCanvas.jsx';
@@ -197,6 +198,7 @@ export default function Room() {
           roomId={roomId}
           canvasId={activeCanvas}
           playerId={playerId}
+          aspect={cellAspect(room.playerCount || 4, activeCanvas)}
           initialStrokes={room.canvases[String(activeCanvas)]?.strokes || []}
           onClose={() => {
             setActiveCanvas(null);

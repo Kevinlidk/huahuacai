@@ -61,6 +61,7 @@ let roomId;
 {
   const { status, data } = await call('/rooms', { ...A });
   check('创建测试房间', status === 200 && !!data?.room?.roomId);
+  check('未指定人数默认 4 人', data?.room?.playerCount === 4, `实际=${data?.room?.playerCount}`);
   roomId = data?.room?.roomId;
   await call('/rooms', { roomId, ...B });
 }
@@ -295,6 +296,28 @@ let roomId;
   check('40s 内连续三次心跳零写盘', putCount === afterJoin, `join后=${afterJoin} 现在=${putCount}`);
   await handleApi(req('/rooms/THRT/heartbeat', { playerId: player.playerId, playerName: '新名字' }), countingStorage);
   check('改名触发立即写盘', putCount === afterJoin + 1, `now=${putCount}`);
+}
+
+// ===== 10. 自定义人数房间 =====
+{
+  const { status, data } = await call('/rooms', { roomId: 'TWO2', playerId: 'p_edgeaaaaaa', playerName: '甲', playerCount: 2 });
+  check('创建2人房间', status === 200 && data?.room?.playerCount === 2);
+  const over = await call('/rooms/TWO2/claim', { canvasId: 3, ...A });
+  check('2人房间认领画板3被拒(400)', over.status === 400 && over.data?.error === 'bad_canvas');
+  for (const n of [1, 2]) {
+    await call('/rooms/TWO2/claim', { canvasId: n, ...A });
+    await call('/rooms/TWO2/finish', { canvasId: n, playerId: A.playerId });
+  }
+  const { status: rs, data: rd } = await call('/rooms/TWO2/reveal', {});
+  check('2人房间2格全完成即可揭晓', rs === 200 && rd?.room?.status === 'revealed');
+  const bad = await call('/rooms', { roomId: 'THREE', playerId: 'p_edgeaaaaaa', playerCount: 3.5 });
+  check('非整数人数被拒(400)', bad.status === 400);
+  const overCnt = await call('/rooms', { roomId: 'THRTN', playerId: 'p_edgeaaaaaa', playerCount: 13 });
+  check('人数超上限被拒(400)', overCnt.status === 400);
+  const underCnt = await call('/rooms', { roomId: 'THRTN', playerId: 'p_edgeaaaaaa', playerCount: 1 });
+  check('人数低于下限被拒(400)', underCnt.status === 400);
+  const joined = await call('/rooms', { roomId: 'TWO2', playerId: 'p_edgebbbbbb', playerName: '乙' });
+  check('加入已有房间保持其人数', joined.status === 200 && joined.data?.room?.playerCount === 2);
 }
 
 console.log(`\n结果: ${passed} 通过, ${failed} 失败`);

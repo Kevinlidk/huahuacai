@@ -1,14 +1,17 @@
 // 房间业务逻辑 + /api 路由：worker（KV 存储）与 server（内存存储）共用同一份实现，
 // 保证本地 mock 与线上行为一致。
 import {
-  CANVAS_IDS,
   MAX_BODY_BYTES,
   MAX_STROKES,
   MAX_STROKES_BATCH,
+  PLAYER_COUNT_DEFAULT,
+  PLAYER_COUNT_MAX,
+  PLAYER_COUNT_MIN,
   PRESENCE_TTL_MS,
   isValidPlayerId,
   isValidRoomId,
   isValidStroke,
+  normalizePlayerCount,
   sanitizeName,
 } from './validate.js';
 
@@ -133,16 +136,17 @@ async function touchPlayer(storage, roomId, playerId, playerName, knownMeta) {
   return meta;
 }
 
-async function ensureRoom(storage, roomId) {
+async function ensureRoom(storage, roomId, playerCount = PLAYER_COUNT_DEFAULT) {
   const existing = await storage.get(keyMeta(roomId));
   if (existing) return;
   await storage.put(keyMeta(roomId), {
     status: 'playing',
+    playerCount,
     createdAt: now(),
     updatedAt: now(),
     players: {},
   });
-  for (const n of CANVAS_IDS) {
+  for (let n = 1; n <= playerCount; n++) {
     await storage.put(keyCanvas(roomId, n), {
       status: 'idle',
       artistId: null,
@@ -155,10 +159,12 @@ async function ensureRoom(storage, roomId) {
 
 async function snapshot(storage, roomId) {
   const meta = await getRoom(storage, roomId);
-  const canvasObjs = await Promise.all(CANVAS_IDS.map((n) => storage.get(keyCanvas(roomId, n))));
+  const playerCount = meta.playerCount ?? PLAYER_COUNT_DEFAULT;
+  const ids = Array.from({ length: playerCount }, (_, i) => i + 1);
+  const canvasObjs = await Promise.all(ids.map((n) => storage.get(keyCanvas(roomId, n))));
   const players = activePlayerMap(meta);
   const canvases = {};
-  CANVAS_IDS.forEach((n, i) => {
+  ids.forEach((n, i) => {
     const c = canvasObjs[i] || {};
     canvases[String(n)] = {
       status: c.status || 'idle',
@@ -171,6 +177,7 @@ async function snapshot(storage, roomId) {
   });
   return {
     roomId,
+    playerCount,
     status: meta.status,
     updatedAt: meta.updatedAt || 0,
     players,
@@ -182,9 +189,13 @@ function freshCanvas() {
   return { status: 'idle', artistId: null, artistName: null, strokes: [], updatedAt: now() };
 }
 
-// 读取画板并做通用校验：画板存在、请求者是画主、处于绘画中、本局未揭晓
+// 读取画板并做通用校验：画板编号在本房范围内、请求者是画主、处于绘画中、本局未揭晓
 async function getOwnedDrawingCanvas(storage, roomId, canvasId, playerId) {
   const meta = await getRoom(storage, roomId);
+  const playerCount = meta.playerCount ?? PLAYER_COUNT_DEFAULT;
+  if (!Number.isInteger(canvasId) || canvasId < 1 || canvasId > playerCount) {
+    fail(400, 'bad_canvas', `画板编号需为 1-${playerCount}`);
+  }
   if (meta.status !== 'playing') fail(409, 'room_revealed', '本局已揭晓，不能再操作画板');
   const canvas = await storage.get(keyCanvas(roomId, canvasId));
   if (!canvas) fail(404, 'canvas_not_found', '画板不存在');
@@ -206,10 +217,14 @@ export async function handleApi(request, storage) {
       return json({ ok: true, ts: now(), sync: getSyncConfig() });
     }
 
-    // POST /api/rooms —— 创建或加入房间（幂等）
+    // POST /api/rooms —— 创建或加入房间（幂等）；创建时可指定参与人数（默认 4）
     if (method === 'POST' && path === '/api/rooms') {
       const body = await readBody(request);
       let roomId = typeof body.roomId === 'string' ? body.roomId.toUpperCase().trim() : '';
+      const playerCount = normalizePlayerCount(body.playerCount);
+      if (playerCount === null) {
+        fail(400, 'bad_player_count', `参与人数需为 ${PLAYER_COUNT_MIN}-${PLAYER_COUNT_MAX} 的整数`);
+      }
       if (roomId) {
         if (!isValidRoomId(roomId)) fail(400, 'bad_room_id', '房间号需为 4-6 位大写字母或数字');
       } else {
@@ -222,7 +237,7 @@ export async function handleApi(request, storage) {
         }
         if (!roomId) fail(500, 'room_id_exhausted', '房间号生成失败，请重试');
       }
-      await ensureRoom(storage, roomId);
+      await ensureRoom(storage, roomId, playerCount);
       if (isValidPlayerId(body.playerId)) {
         await touchPlayer(storage, roomId, body.playerId, body.playerName);
       }
@@ -248,9 +263,12 @@ export async function handleApi(request, storage) {
       // 认领画板：仅 idle 可认领；原画主离线超时后可接管（保留其笔迹）
       if (action === 'claim') {
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const meta = await getRoom(storage, roomId);
+        const playerCount = meta.playerCount ?? PLAYER_COUNT_DEFAULT;
+        if (!Number.isInteger(canvasId) || canvasId < 1 || canvasId > playerCount) {
+          fail(400, 'bad_canvas', `画板编号需为 1-${playerCount}`);
+        }
         if (meta.status !== 'playing') fail(409, 'room_revealed', '本局已揭晓，不能再认领');
         const key = keyCanvas(roomId, canvasId);
         const canvas = (await storage.get(key)) || freshCanvas();
@@ -272,7 +290,6 @@ export async function handleApi(request, storage) {
       if (action === 'strokes') {
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         const canvas = await getOwnedDrawingCanvas(storage, roomId, canvasId, playerId);
         if (!isValidStroke(body.stroke)) fail(400, 'bad_stroke', '笔触数据不合法');
         if (canvas.strokes.length >= MAX_STROKES) fail(409, 'too_many_strokes', '笔触数量已达上限');
@@ -286,7 +303,6 @@ export async function handleApi(request, storage) {
       if (action === 'batch') {
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         const list = body.strokes;
         if (!Array.isArray(list) || list.length === 0 || list.length > MAX_STROKES_BATCH) {
           fail(400, 'bad_batch', `批量笔触需为 1-${MAX_STROKES_BATCH} 条`);
@@ -309,7 +325,6 @@ export async function handleApi(request, storage) {
       if (action === 'undo') {
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         const canvas = await getOwnedDrawingCanvas(storage, roomId, canvasId, playerId);
         let idx = -1;
         for (let i = canvas.strokes.length - 1; i >= 0; i--) {
@@ -329,7 +344,6 @@ export async function handleApi(request, storage) {
       if (action === 'clear') {
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         const canvas = await getOwnedDrawingCanvas(storage, roomId, canvasId, playerId);
         canvas.strokes = [];
         canvas.updatedAt = now();
@@ -341,7 +355,6 @@ export async function handleApi(request, storage) {
       if (action === 'finish') {
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         const canvas = await getOwnedDrawingCanvas(storage, roomId, canvasId, playerId);
         canvas.status = 'done';
         canvas.updatedAt = now();
@@ -353,8 +366,11 @@ export async function handleApi(request, storage) {
       if (action === 'release') {
         if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
         const canvasId = Number(body.canvasId);
-        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
         const meta = await getRoom(storage, roomId);
+        const playerCount = meta.playerCount ?? PLAYER_COUNT_DEFAULT;
+        if (!Number.isInteger(canvasId) || canvasId < 1 || canvasId > playerCount) {
+          fail(400, 'bad_canvas', `画板编号需为 1-${playerCount}`);
+        }
         const key = keyCanvas(roomId, canvasId);
         const canvas = await storage.get(key);
         if (!canvas || canvas.status === 'idle') return json({ ok: true, room: await snapshot(storage, roomId) });
@@ -367,12 +383,14 @@ export async function handleApi(request, storage) {
         return json({ ok: true, room: await snapshot(storage, roomId) });
       }
 
-      // 揭晓：4 格全部完成后任何人可触发
+      // 揭晓：全部画板完成后任何人可触发
       if (action === 'reveal') {
         const meta = await getRoom(storage, roomId);
         if (meta.status === 'revealed') return json({ ok: true, room: await snapshot(storage, roomId) });
         if (meta.status !== 'playing') fail(409, 'bad_state', '当前状态不能揭晓');
-        const canvases = await Promise.all(CANVAS_IDS.map((n) => storage.get(keyCanvas(roomId, n))));
+        const playerCount = meta.playerCount ?? PLAYER_COUNT_DEFAULT;
+        const ids = Array.from({ length: playerCount }, (_, i) => i + 1);
+        const canvases = await Promise.all(ids.map((n) => storage.get(keyCanvas(roomId, n))));
         if (!canvases.every((c) => c && c.status === 'done')) fail(409, 'not_all_done', '还有画板未完成');
         meta.status = 'revealed';
         meta.updatedAt = now();
@@ -386,7 +404,8 @@ export async function handleApi(request, storage) {
         meta.status = 'playing';
         meta.updatedAt = now();
         await storage.put(keyMeta(roomId), meta);
-        for (const n of CANVAS_IDS) {
+        const playerCount = meta.playerCount ?? PLAYER_COUNT_DEFAULT;
+        for (let n = 1; n <= playerCount; n++) {
           await storage.put(keyCanvas(roomId, n), freshCanvas());
         }
         return json({ ok: true, room: await snapshot(storage, roomId) });
