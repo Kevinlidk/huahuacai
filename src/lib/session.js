@@ -22,11 +22,36 @@ export function getPlayerId() {
   }
 }
 
+// 默认昵称：浏览器拿不到设备名/系统用户名（隐私沙箱），
+// 首次访问自动生成一个有辨识度的昵称并持久化，效果等同「免输入的默认身份」
+const NICK_ADJECTIVES = [
+  '调皮的', '安静的', '闪亮的', '好奇的', '认真的', '温柔的',
+  '勇敢的', '神秘的', '快乐的', '机灵的', '慵懒的', '热情的',
+];
+const NICK_NOUNS = [
+  '小狐狸', '小海豚', '小熊猫', '小刺猬', '小画家', '小企鹅',
+  '云朵', '星星', '柠檬', '月亮', '奶茶', '台风',
+];
+
+function randomNickname() {
+  const buf = new Uint32Array(1);
+  const pick = (list) => {
+    crypto.getRandomValues(buf);
+    return list[buf[0] % list.length];
+  };
+  return `${pick(NICK_ADJECTIVES)}${pick(NICK_NOUNS)}`;
+}
+
 export function getPlayerName() {
   try {
-    return localStorage.getItem(NAME_KEY) || '';
+    let name = localStorage.getItem(NAME_KEY);
+    if (!name) {
+      name = randomNickname();
+      localStorage.setItem(NAME_KEY, name);
+    }
+    return name;
   } catch {
-    return '';
+    return randomNickname();
   }
 }
 
