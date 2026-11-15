@@ -1,10 +1,16 @@
 // /api 客户端：所有后端交互集中在这里
 async function request(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // 网络层失败（服务未启动/断网），给出可行动的提示
+    throw new Error('无法连接服务器：本地请先运行 npm run dev，线上请检查网络');
+  }
   let data = null;
   try {
     data = await res.json();
