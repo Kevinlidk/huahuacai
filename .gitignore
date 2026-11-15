@@ -6,6 +6,9 @@ dist/
 .DS_Store
 .mimosa/
 
+# 由 scripts/build-config.mjs 部署时生成，不入库
+wrangler.generated.jsonc
+
 # 仅本地保留，不上传 GitHub
 多人协作拼图绘画应用实现计划.md
 FEASIBILITY.md

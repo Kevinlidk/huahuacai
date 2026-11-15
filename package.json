@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
-    "deploy": "npm run build && npx -y wrangler deploy"
+    "deploy": "node scripts/build-config.mjs && npm run build && npx -y wrangler deploy --config wrangler.generated.jsonc"
   },
   "dependencies": {
     "react": "^19.1.0",
