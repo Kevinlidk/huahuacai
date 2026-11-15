@@ -4,8 +4,8 @@ import '../background/engine.css';
 import '../background/theme-linkage.css';
 
 // 字形流动背景：装饰性全屏层（z-index:-2），在应用根部挂载一次。
-// 参数对齐插件 0.1.2 实测基准：固定种子 0x19a4c637、look mixed、
-// interactive false、timing {fadeIn:3000, fadeOut:500}；其余引擎参数原样使用。
+// 每次进入随机种子（图案不重样）；其余参数对齐插件 0.1.2 实测基准：
+// look mixed、interactive false、timing {fadeIn:3000, fadeOut:500}。
 export default function DynamicBackground() {
   const ref = useRef(null);
 
@@ -16,12 +16,15 @@ export default function DynamicBackground() {
     try {
       instance = GlyphWind.create({
         element: el,
-        settings: () =>
-          Object.assign(GlyphWind.defaults(), {
-            seed: 0x19a4c637, // 基准固定种子，图案可复现
+        settings: () => {
+          const buf = new Uint32Array(1);
+          crypto.getRandomValues(buf);
+          return Object.assign(GlyphWind.defaults(), {
+            seed: buf[0] || 0x19a4c637, // 随机种子（加密安全源，0 回退基准值）
             look: 'mixed',
             interactive: false, // 纯装饰：不绑定指针事件，不拦截任何点击
-          }),
+          });
+        },
         timing: () => ({ fadeIn: 3000, fadeOut: 500 }),
         onReady: () => {
           // 产品决策：背景流动是本应用的核心视觉，始终运行
