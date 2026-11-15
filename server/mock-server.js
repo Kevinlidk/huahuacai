@@ -5,11 +5,11 @@ import http from 'node:http';
 import { configureSync, handleApi } from '../shared/api.js';
 import { writeJson } from './respond.js';
 
-// 本地内存存储无任何额度约束：实时同步节奏
+// 本地内存存储无任何额度约束：实时同步节奏（每笔即时上传、0.3s 轮询、2s 心跳）
 configureSync({
   presenceWriteGapMs: 0,
-  presenceTtlMs: 15_000,
-  sync: { pollMs: 500, heartbeatMs: 5000, strokeBatchMs: 0, strokeBatchMax: 1 },
+  presenceTtlMs: 6000,
+  sync: { pollMs: 300, heartbeatMs: 2000, strokeBatchMs: 0, strokeBatchMax: 1 },
 });
 
 const PORT = Number(process.env.PORT || 8788);

@@ -49,7 +49,7 @@ console.log(`边界测试目标: ${BASE}`);
   check('健康检查', status === 200 && data?.ok === true);
   check(
     '下发自托管实时同步配置',
-    data?.sync?.pollMs === 500 && data?.sync?.strokeBatchMs === 0 && data?.sync?.heartbeatMs === 5000,
+    data?.sync?.pollMs === 300 && data?.sync?.strokeBatchMs === 0 && data?.sync?.heartbeatMs === 2000,
     JSON.stringify(data?.sync)
   );
 }
