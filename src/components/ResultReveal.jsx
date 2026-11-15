@@ -14,7 +14,11 @@ export default function ResultReveal({ room, onReset }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="relative w-full max-w-lg my-auto" style={{ perspective: '1200px' }}>
+      {/* 卡片尺寸自适应：取「视口宽 92%」与「可用高度」较小者，上限 980px */}
+      <div
+        className="relative w-[min(92vw,calc(100dvh-200px),980px)] min-w-[280px] my-auto"
+        style={{ perspective: '1200px' }}
+      >
         {/* 信封盖：先翻开（翻过 90° 后因背面隐藏而消失） */}
         <div
           className="hhc-flap absolute left-0 right-0 top-0 h-20 bg-rose-600 z-20"
@@ -28,7 +32,7 @@ export default function ResultReveal({ room, onReset }) {
         {/* 信封主体 + 信纸升起 */}
         <div className="relative z-10 rounded-2xl bg-rose-500 shadow-2xl p-3 pt-6">
           <div className="hhc-rise rounded-xl bg-white p-3">
-            <p className="text-center text-sm text-slate-400 mb-2">
+            <p className="text-center text-sm sm:text-base text-slate-400 mb-2">
               🎉 房间 {room.roomId} 的合作拼图完成
             </p>
             <img
