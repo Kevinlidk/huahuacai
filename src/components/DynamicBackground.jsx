@@ -12,19 +12,21 @@ export default function DynamicBackground() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
+    // 种子只在挂载时生成一次：引擎每帧都会调用 settings()，
+    // 若在回调内取随机数会导致风场每帧重建、画面乱闪
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    const seed = buf[0] || 0x19a4c637;
     let instance = null;
     try {
       instance = GlyphWind.create({
         element: el,
-        settings: () => {
-          const buf = new Uint32Array(1);
-          crypto.getRandomValues(buf);
-          return Object.assign(GlyphWind.defaults(), {
-            seed: buf[0] || 0x19a4c637, // 随机种子（加密安全源，0 回退基准值）
+        settings: () =>
+          Object.assign(GlyphWind.defaults(), {
+            seed,
             look: 'mixed',
             interactive: false, // 纯装饰：不绑定指针事件，不拦截任何点击
-          });
-        },
+          }),
         timing: () => ({ fadeIn: 3000, fadeOut: 500 }),
         onReady: () => {
           // 产品决策：背景流动是本应用的核心视觉，始终运行
