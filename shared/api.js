@@ -4,12 +4,24 @@ import {
   CANVAS_IDS,
   MAX_BODY_BYTES,
   MAX_STROKES,
+  MAX_STROKES_BATCH,
   PRESENCE_TTL_MS,
   isValidPlayerId,
   isValidRoomId,
   isValidStroke,
   sanitizeName,
 } from './validate.js';
+
+// 在场信息写盘节流：间隔内的重复心跳不再写 KV（免费层每天仅 1000 次写）
+const PRESENCE_WRITE_GAP_MS = 40_000;
+
+export class ApiError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
 
 const ROOM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 去掉易混淆的 I/O/0/1
 // 房间号是加入房间的唯一凭证，用加密安全随机源生成
@@ -36,14 +48,6 @@ const json = (data, status = 200) =>
       'access-control-allow-headers': 'content-type',
     },
   });
-
-class ApiError extends Error {
-  constructor(status, code, message) {
-    super(message);
-    this.status = status;
-    this.code = code;
-  }
-}
 
 function fail(status, code, message) {
   throw new ApiError(status, code, message);
@@ -87,12 +91,21 @@ async function getRoom(storage, roomId) {
   return meta;
 }
 
-async function touchPlayer(storage, roomId, playerId, playerName) {
-  const meta = await getRoom(storage, roomId);
+async function touchPlayer(storage, roomId, playerId, playerName, knownMeta) {
+  const meta = knownMeta || (await getRoom(storage, roomId));
   meta.players = meta.players || {};
-  meta.players[playerId] = { name: sanitizeName(playerName), lastSeen: now() };
-  meta.updatedAt = now();
-  await storage.put(keyMeta(roomId), meta);
+  const prev = meta.players[playerId];
+  const ts = now();
+  const nextName = sanitizeName(playerName);
+  // 脏检查：只有新玩家、改名或距上次落盘超过写间隔才真正写 KV，
+  // 否则只更新本次响应用的内存副本（省写额度）
+  const dirty =
+    !prev || prev.name !== nextName || ts - (prev.lastSeen || 0) > PRESENCE_WRITE_GAP_MS;
+  meta.players[playerId] = { name: nextName, lastSeen: ts };
+  if (dirty) {
+    meta.updatedAt = ts;
+    await storage.put(keyMeta(roomId), meta);
+  }
   return meta;
 }
 
@@ -201,7 +214,7 @@ export async function handleApi(request, storage) {
     }
 
     // /api/rooms/:id/<action>
-    const mAction = path.match(/^\/api\/rooms\/([A-Za-z0-9]{4,6})\/(claim|strokes|undo|finish|release|reveal|reset|clear|heartbeat)$/);
+    const mAction = path.match(/^\/api\/rooms\/([A-Za-z0-9]{4,6})\/(claim|strokes|batch|undo|finish|release|reveal|reset|clear|heartbeat)$/);
     if (mAction && method === 'POST') {
       const roomId = mAction[1].toUpperCase();
       const action = mAction[2];
@@ -227,7 +240,7 @@ export async function handleApi(request, storage) {
         canvas.artistName = sanitizeName(body.playerName);
         canvas.updatedAt = now();
         await storage.put(key, canvas);
-        await touchPlayer(storage, roomId, playerId, body.playerName);
+        await touchPlayer(storage, roomId, playerId, body.playerName, meta);
         return json({ ok: true, room: await snapshot(storage, roomId) });
       }
 
@@ -241,6 +254,29 @@ export async function handleApi(request, storage) {
         if (canvas.strokes.length >= MAX_STROKES) fail(409, 'too_many_strokes', '笔触数量已达上限');
         canvas.strokes.push({ ...body.stroke, by: playerId, at: now() });
         canvas.updatedAt = now();
+        await storage.put(keyCanvas(roomId, canvasId), canvas);
+        return json({ ok: true, count: canvas.strokes.length });
+      }
+
+      // 批量上传笔触：一次 KV 写入提交多笔（客户端约 2.5s 或攒满 8 笔刷一次）
+      if (action === 'batch') {
+        if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
+        const canvasId = Number(body.canvasId);
+        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
+        const list = body.strokes;
+        if (!Array.isArray(list) || list.length === 0 || list.length > MAX_STROKES_BATCH) {
+          fail(400, 'bad_batch', `批量笔触需为 1-${MAX_STROKES_BATCH} 条`);
+        }
+        for (const s of list) {
+          if (!isValidStroke(s)) fail(400, 'bad_stroke', '笔触数据不合法');
+        }
+        const canvas = await getOwnedDrawingCanvas(storage, roomId, canvasId, playerId);
+        if (canvas.strokes.length + list.length > MAX_STROKES) {
+          fail(409, 'too_many_strokes', '笔触数量已达上限');
+        }
+        const ts = now();
+        canvas.strokes.push(...list.map((s) => ({ ...s, by: playerId, at: ts })));
+        canvas.updatedAt = ts;
         await storage.put(keyCanvas(roomId, canvasId), canvas);
         return json({ ok: true, count: canvas.strokes.length });
       }

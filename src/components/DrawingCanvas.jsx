@@ -22,6 +22,57 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
   const lastSideRef = useRef(0);
   const currentRef = useRef(null); // 正在进行的笔触
   const drawingRef = useRef(false);
+  const pendingRef = useRef([]); // 待上传笔触缓冲（批量写，省 KV 额度）
+  const flushTimerRef = useRef(null);
+
+  // 把缓冲中的笔触一次性提交（一次 KV 写）；失败则放回队首等待重试
+  const flushStrokes = async () => {
+    const pending = pendingRef.current;
+    if (pending.length === 0) return;
+    pendingRef.current = [];
+    try {
+      await api.strokesBatch(roomId, canvasId, playerId, pending);
+    } catch (e) {
+      setError(e.message);
+      pendingRef.current = [...pending, ...pendingRef.current];
+    }
+  };
+
+  const queueStroke = (stroke) => {
+    pendingRef.current.push(stroke);
+    if (pendingRef.current.length >= 8) {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      flushStrokes();
+    } else if (!flushTimerRef.current) {
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        flushStrokes();
+      }, 2500);
+    }
+  };
+
+  const discardPending = () => {
+    pendingRef.current = [];
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+  };
+
+  // 卸载时兜底冲刷，避免未上传的笔迹丢失
+  useEffect(
+    () => () => {
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+      const pending = pendingRef.current;
+      if (pending.length > 0) {
+        api.strokesBatch(roomId, canvasId, playerId, pending).catch(() => {});
+      }
+    },
+    [roomId, canvasId, playerId]
+  );
 
   // 容器尺寸 → 正方形边长
   useEffect(() => {
@@ -104,17 +155,21 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     if (stroke.points.length < 2) return;
     setRedoStack([]); // 新笔触入栈后重做历史作废
     setStrokes((s) => [...s, stroke]);
-    api
-      .addStroke(roomId, canvasId, playerId, stroke)
-      .catch((e) => setError(e.message));
+    queueStroke(stroke);
   };
 
-  const handleUndo = () => {
+  const handleUndo = async () => {
     if (strokes.length === 0) return;
-    const last = strokes[strokes.length - 1];
-    setRedoStack((s) => [...s, last]);
-    setStrokes((s) => s.slice(0, -1));
-    api.undo(roomId, canvasId, playerId).catch((e) => setError(e.message));
+    setError('');
+    try {
+      await flushStrokes(); // 先把缓冲笔触落库，保证撤销作用在完整状态上
+      await api.undo(roomId, canvasId, playerId);
+      const last = strokes[strokes.length - 1];
+      setRedoStack((s) => [...s, last]);
+      setStrokes((s) => s.slice(0, -1));
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   const handleRedo = () => {
@@ -130,6 +185,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     if (!window.confirm('清空本格所有笔迹？')) return;
     setBusy(true);
     setError('');
+    discardPending(); // 服务端整体清空，缓冲无需上传
     try {
       await api.clear(roomId, canvasId, playerId);
       setStrokes([]);
@@ -145,6 +201,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     setBusy(true);
     setError('');
     try {
+      await flushStrokes(); // 确保缓冲笔触已落库再标记完成
       await api.finish(roomId, canvasId, playerId);
       onClose();
     } catch (e) {
@@ -156,6 +213,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
   const handleAbandon = async () => {
     if (!window.confirm('放弃本格绘画？已画的笔迹会全部清空。')) return;
     setBusy(true);
+    discardPending();
     try {
       await api.release(roomId, canvasId, playerId);
       onClose();

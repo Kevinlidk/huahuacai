@@ -33,6 +33,8 @@ export const api = {
     request(`/api/rooms/${roomId}/claim`, { method: 'POST', body: { canvasId, playerId, playerName } }),
   addStroke: (roomId, canvasId, playerId, stroke) =>
     request(`/api/rooms/${roomId}/strokes`, { method: 'POST', body: { canvasId, playerId, stroke } }),
+  strokesBatch: (roomId, canvasId, playerId, strokes) =>
+    request(`/api/rooms/${roomId}/batch`, { method: 'POST', body: { canvasId, playerId, strokes } }),
   undo: (roomId, canvasId, playerId) =>
     request(`/api/rooms/${roomId}/undo`, { method: 'POST', body: { canvasId, playerId } }),
   clear: (roomId, canvasId, playerId) =>

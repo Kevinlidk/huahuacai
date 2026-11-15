@@ -181,12 +181,12 @@ let roomId;
   await call(`/rooms/${roomId}/release`, { canvasId: 2, playerId: B.playerId });
 }
 
-// ===== 5. 心跳过期接管（等 31s）=====
+// ===== 5. 心跳过期接管（等 80s，在场 TTL 75s）=====
 {
   await call(`/rooms/${roomId}/claim`, { canvasId: 3, ...A });
   await call(`/rooms/${roomId}/strokes`, { canvasId: 3, playerId: A.playerId, stroke: stroke() });
-  console.log('  … 等待 31s 让甲心跳过期');
-  await new Promise((r) => setTimeout(r, 31_000));
+  console.log('  … 等待 80s 让甲心跳过期');
+  await new Promise((r) => setTimeout(r, 80_000));
   const { status, data } = await call(`/rooms/${roomId}/claim`, { canvasId: 3, ...B });
   const c3 = data?.room?.canvases?.['3'];
   check('离线画板可被接管且保留笔迹', status === 200 && c3?.artistId === B.playerId && c3?.strokes?.length === 1);
@@ -197,6 +197,31 @@ let roomId;
   const stale = await call(`/rooms/${roomId}/strokes`, { canvasId: 3, playerId: A.playerId, stroke: stroke() });
   check('原画主被接管后写入被拒(403)', stale.status === 403);
   await call(`/rooms/${roomId}/finish`, { canvasId: 3, playerId: B.playerId });
+}
+
+// ===== 5.5 批量笔触 =====
+{
+  await call(`/rooms/${roomId}/claim`, { canvasId: 2, ...B });
+  const list = [
+    stroke({ color: '#22c55e' }),
+    stroke({ color: '#ef4444' }),
+    stroke({ color: '#3b82f6' }),
+  ];
+  const { status, data } = await call(`/rooms/${roomId}/batch`, { canvasId: 2, playerId: B.playerId, strokes: list });
+  check('批量3笔一次提交', status === 200 && data?.count === 3, `status=${status} count=${data?.count}`);
+  const bad = await call(`/rooms/${roomId}/batch`, {
+    canvasId: 2,
+    playerId: B.playerId,
+    strokes: [stroke(), stroke({ color: 'red' })],
+  });
+  check('批量含非法笔触整体拒绝(400)', bad.status === 400);
+  const tooMany = await call(`/rooms/${roomId}/batch`, {
+    canvasId: 2,
+    playerId: B.playerId,
+    strokes: Array.from({ length: 9 }, () => stroke()),
+  });
+  check('批量超过8条拒绝(400)', tooMany.status === 400);
+  await call(`/rooms/${roomId}/release`, { canvasId: 2, playerId: B.playerId });
 }
 
 // ===== 6. 并发认领竞态 =====
@@ -227,6 +252,38 @@ let roomId;
   await call(`/rooms/${roomId}/reset`, {});
   const { status, data } = await call(`/rooms/${roomId}/claim`, { canvasId: 1, ...A });
   check('reset 后可重新认领', status === 200 && data?.room?.canvases?.['1']?.status === 'drawing');
+}
+
+// ===== 9. 心跳写盘节流（直连业务层，用计数存储验证）=====
+{
+  const { handleApi } = await import('../shared/api.js');
+  const mem = new Map();
+  let putCount = 0;
+  const countingStorage = {
+    async get(key) {
+      const v = mem.get(key);
+      return v === undefined ? null : structuredClone(v);
+    },
+    async put(key, value) {
+      putCount++;
+      mem.set(key, structuredClone(value));
+    },
+  };
+  const req = (p, body) =>
+    new Request(`http://test.local/api${p}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  const player = { playerId: 'p_throttle01', playerName: '节流' };
+  await handleApi(req('/rooms', { roomId: 'THRT', ...player }), countingStorage);
+  const afterJoin = putCount;
+  for (let i = 0; i < 3; i++) {
+    await handleApi(req('/rooms/THRT/heartbeat', { ...player }), countingStorage);
+  }
+  check('40s 内连续三次心跳零写盘', putCount === afterJoin, `join后=${afterJoin} 现在=${putCount}`);
+  await handleApi(req('/rooms/THRT/heartbeat', { playerId: player.playerId, playerName: '新名字' }), countingStorage);
+  check('改名触发立即写盘', putCount === afterJoin + 1, `now=${putCount}`);
 }
 
 console.log(`\n结果: ${passed} 通过, ${failed} 失败`);

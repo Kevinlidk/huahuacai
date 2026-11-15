@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 
-// 房间状态轮询：默认 1s 一次，页面隐藏时暂停，回到前台立即刷新
-export function useRoomSync(roomId, { intervalMs = 1000 } = {}) {
+// 房间状态轮询：默认 2s 一次（省 KV 读额度），页面隐藏时暂停，回到前台立即刷新
+export function useRoomSync(roomId, { intervalMs = 2000 } = {}) {
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const stoppedRef = useRef(false);

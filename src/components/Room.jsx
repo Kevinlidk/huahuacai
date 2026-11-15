@@ -49,12 +49,12 @@ export default function Room() {
     }
   }, [error, navigate]);
 
-  // 心跳：5s 一次，维持在场状态
+  // 心跳：20s 一次（服务端写盘节流 40s，省 KV 写额度），维持在场状态
   useEffect(() => {
     if (!roomId) return;
     const beat = () => api.heartbeat(roomId, playerId, name).catch(() => {});
     beat();
-    const timer = setInterval(beat, 5000);
+    const timer = setInterval(beat, 20_000);
     return () => clearInterval(timer);
   }, [roomId, playerId, name]);
 

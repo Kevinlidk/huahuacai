@@ -5,8 +5,9 @@ export const ROOM_ID_RE = /^[A-Z0-9]{4,6}$/;
 export const PLAYER_ID_RE = /^p_[A-Za-z0-9]{6,32}$/;
 export const MAX_STROKES = 3000; // 单画板笔触上限
 export const MAX_POINTS = 2000; // 单笔触点数上限
+export const MAX_STROKES_BATCH = 8; // 批量上传单次笔触数（省 KV 写额度）
 export const MAX_BODY_BYTES = 256 * 1024; // 请求体上限
-export const PRESENCE_TTL_MS = 30_000; // 玩家心跳过期时间
+export const PRESENCE_TTL_MS = 75_000; // 玩家心跳过期时间（客户端 20s 心跳 + 服务端 40s 写节流的兜底余量）
 
 export function isValidRoomId(v) {
   return typeof v === 'string' && ROOM_ID_RE.test(v);
