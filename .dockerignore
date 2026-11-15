@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.github
+.mimosa
+.wrangler
+*.md
+!README.md
+docker-compose.yml
+.dev.vars
+*.local

@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
   "description": "多人协作拼图绘画应用：四人各画一格，拼合揭晓",
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"node server/mock-server.js\" \"vite\"",

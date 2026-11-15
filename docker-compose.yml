@@ -1,0 +1,21 @@
+# 自托管部署（推荐镜像由 GitHub Actions 自动构建发布到 ghcr.io）
+# 用法：docker compose up -d ，访问 http://<主机>:3102
+# 说明：
+#   - 房间/画板数据持久化在宿主机 ./huahuacai/ 目录（挂载到容器 /opt/huahuacai/results/），
+#     容器重建后数据仍在；
+#   - 「最近的房间」等历史任务信息只存各人浏览器的 localStorage，不落容器与卷。
+services:
+  huahuacai:
+    container_name: huahuacai
+    image: ghcr.io/kevinlidk/huahuacai:latest
+    volumes:
+      - ./huahuacai/:/opt/huahuacai/results/
+    ports:
+      - "3102:80"
+    restart: unless-stopped
+    networks:
+      - huahuacai_network
+
+networks:
+  huahuacai_network:
+    driver: bridge

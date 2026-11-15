@@ -41,6 +41,7 @@ npm run smoke:edge  # API 边界/权限专项：恶意笔触、昵称清洗、�
 ├─ worker/index.js    # Cloudflare Worker 入口：/api → KV，其余 → 静态资源
 ├─ server/
 │  ├─ mock-server.js  # 本地 KV 模拟服务（内存 Map，端口 8788）
+│  ├─ docker-server.js # 自托管 Docker 入口：静态 + /api 同进程，磁盘持久化
 │  └─ respond.js      # HTTP JSON 编码输出
 ├─ src/
 │  ├─ components/
@@ -52,6 +53,7 @@ npm run smoke:edge  # API 边界/权限专项：恶意笔触、昵称清洗、�
 │  ├─ hooks/useRoomSync.js # 1s 轮询同步（页面隐藏自动暂停）
 │  └─ lib/                 # api 客户端、笔触渲染、玩家身份
 ├─ scripts/smoke.mjs  # API 冒烟测试
+├─ Dockerfile / docker-compose.yml / .github/workflows  # Docker 镜像构建与 GHCR 发布
 ├─ wrangler.jsonc     # Cloudflare 部署配置
 └─ vite.config.js     # Vite + React + Tailwind v4 + /api 代理
 ```
@@ -174,6 +176,40 @@ npm run deploy                          # = 生成部署配置 + vite build + wr
 
 > **额度保护机制**：客户端心跳 20s（服务端 40s 写间隔脏检查，重复心跳零写盘）、笔触 2.5s/8 笔批量上传、轮询 2s。写额度超限时接口返回 429 与友好提示（免费层每日 1000 次写约支撑 4~6 局四人游戏，超量请升级 Workers Paid $5/月，每日 00:00 UTC 重置）。
 
+## 自托管部署（Docker · ghcr.io）
+
+不想依赖 Cloudflare（或想部署在自己的服务器 / NAS）时，可直接使用官方镜像自托管：单容器同时提供静态页面与 `/api`，数据持久化在本地磁盘，**无每日额度限制**。镜像由 GitHub Actions 在每次 push 到 main 时自动构建发布（`.github/workflows/docker-publish.yml`）。
+
+```bash
+mkdir huahuacai && cd huahuacai   # 任意空目录，房间数据将存于此
+# 按下方内容创建 docker-compose.yml，然后：
+docker compose up -d              # 访问 http://<主机IP>:3102
+```
+
+```yaml
+services:
+  huahuacai:
+    container_name: huahuacai
+    image: ghcr.io/kevinlidk/huahuacai:latest
+    volumes:
+      - ./huahuacai/:/opt/huahuacai/results/   # 房间数据持久化目录
+    ports:
+      - "3102:80"
+    restart: unless-stopped
+    networks:
+      - huahuacai_network
+
+networks:
+  huahuacai_network:
+    driver: bridge
+```
+
+说明：
+- 房间 / 画板数据以 JSON 文件存于宿主机 `./huahuacai/`（挂载到容器 `/opt/huahuacai/results/`），容器重建、升级镜像后数据不丢；
+- **「最近的房间」等历史任务信息只保存在各人浏览器的 localStorage**，不随容器或卷持久化——换设备 / 浏览器 / 清缓存后消失，属预期行为；
+- 本地构建镜像：`docker build -t ghcr.io/kevinlidk/huahuacai:latest .`；
+- 港口冲突时把 `3102` 换成任意空闲端口即可。
+
 ## 技术决策记录
 
 | 决策 | 常见替代方案 | 实际采用 | 理由 |
@@ -189,4 +225,9 @@ npm run deploy                          # = 生成部署配置 + vite build + wr
 
 - 笔触同步延迟 ≈1s（轮询）；逐笔实时协作需迁移 Durable Objects + WebSocket；
 - 房间号即加入凭证，无用户体系（MVP 定位）；
-- KV 免费写额度 1 千次/天，若用户量增长需升级付费或改造为批量上传笔触。
+- KV 免费写额度 1 千次/天，若用户量增长需升级付费或改造为批量上传笔触；
+- 不想受额度约束？用上方 Docker 自托管方案部署到自己的服务器即可。
+
+## 许可证
+
+[MIT](./LICENSE)
