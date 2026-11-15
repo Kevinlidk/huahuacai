@@ -67,62 +67,105 @@ npm run smoke      # API 端到端冒烟：两名玩家完整走通建房→认�
 
 静态资源与 `/api` 同域部署在 Cloudflare Workers 上，天然无跨域问题。免费版即可运行。
 
-### 前置准备
+**推荐方式：Dashboard 关联 GitHub 仓库**——push 到 `main` 自动构建部署，无需本地安装 wrangler；命令行方式作为备选。
+
+### 方式 A：Dashboard 关联 GitHub 仓库（推荐）
+
+#### 前置准备
 
 - 一个 Cloudflare 账号（[dash.cloudflare.com](https://dash.cloudflare.com) 免费注册）
-- 本机 Node.js ≥ 20.19，且已执行 `npm install`
+- 代码已在 GitHub：本仓库 `Kevinlidk/huahuacai`（`main` 分支）
 
-### 第 1 步：登录 Cloudflare
+#### 第 1 步：创建 KV 命名空间
+
+1. Dashboard → 左侧 **存储和数据库（Storage & Databases）** → **KV**；
+2. **Create namespace**，名称填 `ROOMS`；
+3. 创建后记下它的 **Namespace ID**（32 位十六进制）。
+
+> 也可以用 CLI 创建：`npx wrangler kv namespace create ROOMS`，效果相同。
+
+#### 第 2 步：把 KV ID 写入配置并推送
+
+把上一步的 ID 填入 [wrangler.jsonc](./wrangler.jsonc)：
+
+```jsonc
+"kv_namespaces": [
+  { "binding": "ROOMS", "id": "0a1b2c3d4e5f...（替换占位符）" }
+]
+```
+
+提交并推送到 GitHub：
 
 ```bash
-npx wrangler login      # 会打开浏览器完成授权
-npx wrangler whoami     # 验证登录成功
+git add wrangler.jsonc
+git commit -m "chore: 配置 KV namespace id"
+git push
 ```
 
-> 网络不通时先给终端设置代理再执行：`export HTTPS_PROXY=http://127.0.0.1:7890`（Windows CMD：`set HTTPS_PROXY=http://127.0.0.1:7890`）。
+> 这一步必须在连接仓库之前完成：Git 构建执行 `wrangler deploy` 时读取仓库里的 `wrangler.jsonc`，占位符 id 会导致首次部署失败。
 
-### 第 2 步：创建 KV 命名空间
+#### 第 3 步：Dashboard 连接 GitHub 仓库
+
+1. Dashboard → **Workers 和 Pages（Workers & Pages）** → **Create（创建）**；
+2. 选择 **Workers** → **Import a repository（导入存储库）**；
+3. 首次使用会要求授权 GitHub（安装 Cloudflare GitHub App，可选择只授权 `huahuacai` 这一个仓库）；
+4. 选中 `Kevinlidk/huahuacai`，进入构建配置：
+
+| 配置项 | 填写值 |
+| --- | --- |
+| Project name | `huahuacai`（即访问子域） |
+| Production branch | `main` |
+| Build command（构建命令） | `npm run build` |
+| Deploy command（部署命令） | `npx wrangler deploy` |
+| Root directory | 默认（仓库根） |
+
+5. 点 **Save and Deploy（保存并部署）**。首次构建约 1~2 分钟，完成后得到地址 `https://huahuacai.<你的子域>.workers.dev`。
+
+#### 第 4 步：日常更新 = git push
+
+之后的任何改动只需：
 
 ```bash
-npx wrangler kv namespace create ROOMS
+git push
 ```
 
-命令会输出类似：
+Cloudflare 会自动拉取 `main` 最新代码 → `npm run build` → `wrangler deploy`，全程无需本地操作。Dashboard 的部署历史里每次构建都可查看日志、一键回滚。
 
-```text
-[[kv_namespaces]]
-binding = "ROOMS"
-id = "0a1b2c3d4e5f..."
-```
+#### 第 5 步：线上验证
 
-把 `id` 填入 [wrangler.jsonc](./wrangler.jsonc) 的 `kv_namespaces[0].id`，替换占位符 `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`。
-
-### 第 3 步：构建并部署
-
-```bash
-npm run deploy          # 等价于 vite build + wrangler deploy
-```
-
-部署成功会输出访问地址，形如 `https://huahuacai.<你的子域>.workers.dev`。
-
-### 第 4 步：线上验证
-
-1. 打开该地址 → 输入昵称 →「创建新房间」；
+1. 打开 workers.dev 地址 → 输入昵称 →「创建新房间」；
 2. 另开一个无痕窗口 → 输入同一房间号「加入」；
 3. 确认两窗口互见在线名单、笔迹约 1 秒同步、四格完成后可揭晓。
 
-### 第 5 步（可选）：绑定自定义域名 / 国内加速
+### 方式 B：命令行部署（备选）
 
-- **自定义域名**：Cloudflare 控制台 → Workers & Pages → `huahuacai` → Settings → Domains & Routes → Add → Custom domain（前提：域名已用 NS 方式托管在同一 Cloudflare 账号）；
-- **国内加速**：`*.workers.dev` 在国内时常被阻断，建议用自定义域名，并可在前面加腾讯 EdgeOne（源站指向该域名）做国内链路加速。
+适合不想走 Git 集成、或需要本地快速验证的场景：
+
+```bash
+# 1. 登录（会开浏览器授权；网络不通先设代理 export HTTPS_PROXY=http://127.0.0.1:7890）
+npx wrangler login
+npx wrangler whoami           # 验证登录
+
+# 2. 创建 KV 命名空间（若已在方式 A 第 1 步做过则跳过）
+npx wrangler kv namespace create ROOMS
+
+# 3. 确认 wrangler.jsonc 已填真实 KV id，然后构建部署
+npm run deploy                # = vite build + wrangler deploy
+```
+
+### 自定义域名 / 国内加速（可选）
+
+- **自定义域名**：Cloudflare 控制台 → Workers 和 Pages → `huahuacai` → Settings → Domains & Routes → Add → Custom domain（前提：域名已用 NS 方式托管在同一 Cloudflare 账号）；
+- **国内加速**：`*.workers.dev` 在国内时常被阻断，建议绑定自定义域名，并可在前面加腾讯 EdgeOne（源站指向该域名）做国内链路加速。
 
 ### 常见问题
 
 | 现象 | 原因与处理 |
 | --- | --- |
-| 部署报错提到 KV namespace id | `wrangler.jsonc` 里还是占位符，回到第 2 步填入真实 id |
+| Git 构建日志报 KV namespace id 错误 | 仓库里 `wrangler.jsonc` 还是占位符，按方式 A 第 1~2 步填真实 ID 并 push |
+| Git 构建失败 | 查看 Dashboard 部署日志：多为依赖安装失败（重试即可）或 Node 版本（构建镜像默认满足 ≥20） |
+| 部署成功但接口报错 | KV 绑定名必须是 `ROOMS`（`worker/index.js` 读取 `env.ROOMS`）；在 Worker → Settings → Bindings 里核对 |
 | `wrangler` 命令超时/连不上 | 终端设置 `HTTPS_PROXY=http://127.0.0.1:7890` 后重试 |
-| 页面能打开但接口报错 | 检查 KV 绑定名必须是 `ROOMS`（`worker/index.js` 读取 `env.ROOMS`），且部署前已 `npm run build` |
 | 房间数据偶尔读不到旧值 | KV 最终一致性所致（同区域通常立即可见，跨区域有秒级延迟），轮询机制会自动补上 |
 
 ### 免费额度参考
