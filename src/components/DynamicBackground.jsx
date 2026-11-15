@@ -24,10 +24,9 @@ export default function DynamicBackground() {
           }),
         timing: () => ({ fadeIn: 3000, fadeOut: 500 }),
         onReady: () => {
-          // 尊重系统「减少动态效果」偏好：保持静止
-          if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            instance.setRunning(true);
-          }
+          // 产品决策：背景流动是本应用的核心视觉，始终运行
+          // （部分浏览器环境会上报「减少动态效果」偏好，此前因此保持静止）
+          instance.setRunning(true);
         },
         onError: (e) => {
           console.error('[background]', e);
