@@ -3,7 +3,10 @@ import { composeReveal } from '../lib/strokes.js';
 
 // 结果揭晓：四格全部完成后，信封动画展开完整拼图
 export default function ResultReveal({ room, onReset }) {
-  const imageUrl = useMemo(() => composeReveal(room.canvases), [room.canvases]);
+  // 揭晓后四格笔迹已冻结（reset 会卸载本组件），合成图只需计算一次；
+  // room 来自轮询、每秒都是新引用，不能作为依赖，否则每秒重绘 1600×1600 位图
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const imageUrl = useMemo(() => composeReveal(room.canvases), []);
 
   const handleSave = () => {
     const a = document.createElement('a');

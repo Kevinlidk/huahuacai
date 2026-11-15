@@ -7,6 +7,23 @@ import GridBoard from './GridBoard.jsx';
 import DrawingCanvas from './DrawingCanvas.jsx';
 import ResultReveal from './ResultReveal.jsx';
 
+// 旧式复制兜底（navigator.clipboard 被拒时）
+function legacyCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function Room() {
   const { roomId: rawRoomId } = useParams();
   const roomId = (rawRoomId || '').toUpperCase();
@@ -32,6 +49,29 @@ export default function Room() {
     const timer = setInterval(beat, 5000);
     return () => clearInterval(timer);
   }, [roomId, playerId, name]);
+
+  // 轮询发现画板被他人接管时自动收起绘画层，避免本地继续画、上传却被拒。
+  // 只认「status=drawing 且画主不是自己」这一种新状态：认领前的旧快照里
+  // 该格只会是 idle/drawing(自己)，不会误伤刚认领的瞬间
+  useEffect(() => {
+    if (!activeCanvas || !room) return;
+    const c = room.canvases[String(activeCanvas)];
+    if (c && c.status === 'drawing' && c.artistId && c.artistId !== playerId) {
+      setActiveCanvas(null);
+      setNotice('该画板已被其他画友接管');
+      refresh();
+    }
+  }, [room, activeCanvas, playerId, refresh]);
+
+  const handleCopyInvite = () => {
+    const link = `${window.location.origin}/room/${roomId}`;
+    const done = () => setNotice('邀请链接已复制，发给朋友即可加入');
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(link).then(done, () => legacyCopy(link) ? done() : setNotice(link));
+    } else {
+      legacyCopy(link) ? done() : setNotice(link);
+    }
+  };
 
   const handleCellClick = async (canvasId) => {
     const canvas = room?.canvases?.[String(canvasId)];
@@ -105,8 +145,9 @@ export default function Room() {
         <div className="text-center">
           <p className="text-xs text-slate-400">房间号（点击复制）</p>
           <button
-            onClick={() => navigator.clipboard?.writeText(roomId)}
+            onClick={handleCopyInvite}
             className="font-mono text-2xl font-bold tracking-widest text-slate-800 hover:text-sky-600 transition"
+            title="复制邀请链接"
           >
             {roomId}
           </button>

@@ -66,6 +66,17 @@ export function composeReveal(canvases) {
     if (data?.strokes) drawStrokes(ctx, data.strokes, cell, cell);
     ctx.restore();
   }
+  // 十字分隔线：空白格也能看出拼图分界
+  ctx.save();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(cell, 0);
+  ctx.lineTo(cell, cell * 2);
+  ctx.moveTo(0, cell);
+  ctx.lineTo(cell * 2, cell);
+  ctx.stroke();
+  ctx.restore();
   return out.toDataURL('image/png');
 }
 

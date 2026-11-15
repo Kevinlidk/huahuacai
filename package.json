@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:edge": "node scripts/smoke-edge.mjs",
     "deploy": "node scripts/build-config.mjs && npm run build && npx -y wrangler deploy --config wrangler.generated.jsonc"
   },
   "dependencies": {

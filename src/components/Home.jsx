@@ -92,7 +92,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={busy}
-              className="rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-semibold px-5 transition"
+              className="shrink-0 whitespace-nowrap rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-semibold px-5 transition"
             >
               加入
             </button>
