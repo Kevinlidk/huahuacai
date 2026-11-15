@@ -75,7 +75,7 @@ export default function GridBoard({ room, playerId, onCellClick, onReveal, onRel
   const myDrawing = cells.find(({ canvas }) => canvas.status === 'drawing' && canvas.artistId === playerId);
 
   return (
-    <section className="max-w-xl mx-auto px-4 py-6">
+    <section className="mx-auto w-full px-4 py-4 flex flex-col items-center">
       {/* 在场玩家 */}
       <div className="flex flex-wrap justify-center gap-2 mb-4">
         {Object.entries(room.players).map(([pid, p]) => (
@@ -91,7 +91,8 @@ export default function GridBoard({ room, playerId, onCellClick, onReveal, onRel
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 aspect-square">
+      {/* 网格尺寸自适应：取「视口宽 92%」与「可用高度」较小者，上限 860px */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 aspect-square w-[min(92vw,calc(100dvh-250px),860px)] min-w-[280px]">
         {cells.map(({ n, canvas }) => (
           <Cell
             key={n}
