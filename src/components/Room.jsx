@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { addRecentRoom, getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
+import { getSyncConfig, onSyncConfigChange } from '../lib/sync-config.js';
 import { useRoomSync } from '../hooks/useRoomSync.js';
 import GridBoard from './GridBoard.jsx';
 import DrawingCanvas from './DrawingCanvas.jsx';
@@ -49,14 +50,16 @@ export default function Room() {
     }
   }, [error, navigate]);
 
-  // 心跳：20s 一次（服务端写盘节流 40s，省 KV 写额度），维持在场状态
+  // 心跳：间隔由部署模式决定（Cloudflare 20s 省额度，自托管 5s 实时）
+  const [syncCfg, setSyncCfg] = useState(getSyncConfig());
+  useEffect(() => onSyncConfigChange(setSyncCfg), []);
   useEffect(() => {
     if (!roomId) return;
     const beat = () => api.heartbeat(roomId, playerId, name).catch(() => {});
     beat();
-    const timer = setInterval(beat, 20_000);
+    const timer = setInterval(beat, syncCfg.heartbeatMs);
     return () => clearInterval(timer);
-  }, [roomId, playerId, name]);
+  }, [roomId, playerId, name, syncCfg]);
 
   // 轮询发现画板被他人接管时自动收起绘画层，避免本地继续画、上传却被拒。
   // 只认「status=drawing 且画主不是自己」这一种新状态：认领前的旧快照里

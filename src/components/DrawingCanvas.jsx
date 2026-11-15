@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
+import { getSyncConfig } from '../lib/sync-config.js';
 import { PEN_COLORS, PEN_SIZES, clearCanvas, drawStrokes, drawStroke, strokeColor } from '../lib/strokes.js';
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -40,17 +41,20 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
 
   const queueStroke = (stroke) => {
     pendingRef.current.push(stroke);
-    if (pendingRef.current.length >= 8) {
+    // 上传节奏由部署模式决定：自托管每笔立即上传（实时），Cloudflare 攒批省额度
+    const cfg = getSyncConfig();
+    const max = Math.max(1, cfg.strokeBatchMax || 1);
+    if (pendingRef.current.length >= max) {
       if (flushTimerRef.current) {
         clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
       }
       flushStrokes();
-    } else if (!flushTimerRef.current) {
+    } else if (cfg.strokeBatchMs > 0 && !flushTimerRef.current) {
       flushTimerRef.current = setTimeout(() => {
         flushTimerRef.current = null;
         flushStrokes();
-      }, 2500);
+      }, cfg.strokeBatchMs);
     }
   };
 

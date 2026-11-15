@@ -2,8 +2,15 @@
 // 与 worker 共享 shared/api.js 里的同一份业务逻辑，保证本地与线上行为一致。
 // 启动：npm run dev:api （默认端口 8788，可用 PORT 环境变量覆盖）
 import http from 'node:http';
-import { handleApi } from '../shared/api.js';
+import { configureSync, handleApi } from '../shared/api.js';
 import { writeJson } from './respond.js';
+
+// 本地内存存储无任何额度约束：实时同步节奏
+configureSync({
+  presenceWriteGapMs: 0,
+  presenceTtlMs: 15_000,
+  sync: { pollMs: 500, heartbeatMs: 5000, strokeBatchMs: 0, strokeBatchMax: 1 },
+});
 
 const PORT = Number(process.env.PORT || 8788);
 

@@ -43,6 +43,17 @@ const stroke = (over = {}) => ({
 
 console.log(`边界测试目标: ${BASE}`);
 
+// ===== 0. 健康检查 + 同步配置下发 =====
+{
+  const { status, data } = await call('/health');
+  check('健康检查', status === 200 && data?.ok === true);
+  check(
+    '下发自托管实时同步配置',
+    data?.sync?.pollMs === 500 && data?.sync?.strokeBatchMs === 0 && data?.sync?.heartbeatMs === 5000,
+    JSON.stringify(data?.sync)
+  );
+}
+
 // ===== 0. 准备两个房间 =====
 const A = { playerId: 'p_edgeaaaaaa', playerName: '边界甲' };
 const B = { playerId: 'p_edgebbbbbb', playerName: '边界乙' };

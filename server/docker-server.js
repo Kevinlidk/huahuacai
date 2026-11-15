@@ -5,8 +5,15 @@ import http from 'node:http';
 import { promises as fsp } from 'node:fs';
 import { dirname, join, normalize, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { handleApi } from '../shared/api.js';
+import { configureSync, handleApi } from '../shared/api.js';
 import { writeJson } from './respond.js';
+
+// 自托管磁盘存储无任何额度约束：实时同步节奏（每笔即时上传、0.5s 轮询）
+configureSync({
+  presenceWriteGapMs: 0,
+  presenceTtlMs: 15_000,
+  sync: { pollMs: 500, heartbeatMs: 5000, strokeBatchMs: 0, strokeBatchMax: 1 },
+});
 
 const PORT = Number(process.env.PORT || 80);
 const DATA_DIR = process.env.DATA_DIR || '/opt/huahuacai/results';

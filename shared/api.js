@@ -12,8 +12,30 @@ import {
   sanitizeName,
 } from './validate.js';
 
-// 在场信息写盘节流：间隔内的重复心跳不再写 KV（免费层每天仅 1000 次写）
-const PRESENCE_WRITE_GAP_MS = 40_000;
+// 同步节奏配置：按部署模式由服务入口注册（Cloudflare=省额度，自托管=实时无限制）。
+// 前端通过 GET /api/health 的 sync 字段自动获取并跟随。
+const DEFAULT_SYNC = {
+  pollMs: 2000, // 房间快照轮询间隔
+  heartbeatMs: 20_000, // 客户端心跳间隔
+  strokeBatchMs: 2500, // 笔触批量上传间隔（0=每笔立即上传）
+  strokeBatchMax: 8, // 触发立即上传的缓冲笔触数
+};
+const syncOptions = {
+  presenceWriteGapMs: 40_000, // 心跳写盘节流（0=每次心跳都写）
+  presenceTtlMs: PRESENCE_TTL_MS, // 在场过期时间
+  sync: { ...DEFAULT_SYNC },
+};
+
+// 各部署入口在模块加载时调用：worker 传省额度配置，docker/mock 传实时配置
+export function configureSync(options) {
+  if (Number.isFinite(options.presenceWriteGapMs)) syncOptions.presenceWriteGapMs = options.presenceWriteGapMs;
+  if (Number.isFinite(options.presenceTtlMs)) syncOptions.presenceTtlMs = options.presenceTtlMs;
+  if (options.sync) syncOptions.sync = { ...syncOptions.sync, ...options.sync };
+}
+
+export function getSyncConfig() {
+  return { ...syncOptions.sync };
+}
 
 export class ApiError extends Error {
   constructor(status, code, message) {
@@ -78,7 +100,7 @@ async function readBody(request) {
 
 function activePlayerMap(meta) {
   const out = {};
-  const cutoff = now() - PRESENCE_TTL_MS;
+  const cutoff = now() - syncOptions.presenceTtlMs;
   for (const [pid, p] of Object.entries(meta.players || {})) {
     if ((p.lastSeen || 0) >= cutoff) out[pid] = { name: p.name, lastSeen: p.lastSeen };
   }
@@ -98,9 +120,11 @@ async function touchPlayer(storage, roomId, playerId, playerName, knownMeta) {
   const ts = now();
   const nextName = sanitizeName(playerName);
   // 脏检查：只有新玩家、改名或距上次落盘超过写间隔才真正写 KV，
-  // 否则只更新本次响应用的内存副本（省写额度）
+  // 否则只更新本次响应用的内存副本（省写额度；自托管模式写间隔为 0，即每次都写）
   const dirty =
-    !prev || prev.name !== nextName || ts - (prev.lastSeen || 0) > PRESENCE_WRITE_GAP_MS;
+    !prev ||
+    prev.name !== nextName ||
+    ts - (prev.lastSeen || 0) > syncOptions.presenceWriteGapMs;
   meta.players[playerId] = { name: nextName, lastSeen: ts };
   if (dirty) {
     meta.updatedAt = ts;
@@ -177,9 +201,9 @@ export async function handleApi(request, storage) {
   if (method === 'OPTIONS') return json({ ok: true });
 
   try {
-    // GET /api/health —— 健康检查
+    // GET /api/health —— 健康检查 + 下发同步节奏配置（前端自动跟随）
     if (method === 'GET' && path === '/api/health') {
-      return json({ ok: true, ts: now() });
+      return json({ ok: true, ts: now(), sync: getSyncConfig() });
     }
 
     // POST /api/rooms —— 创建或加入房间（幂等）
