@@ -158,7 +158,7 @@ export default function Room() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-sky-100 via-white to-rose-50">
+    <main className="min-h-screen">
       <header className="max-w-3xl mx-auto flex items-center justify-between px-4 pt-5">
         <button
           onClick={() => navigate('/')}
