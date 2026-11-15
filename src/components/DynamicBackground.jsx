@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import GlyphWind from '../background/renderer.js';
 import '../background/engine.css';
+import '../background/theme-linkage.css';
 
 // 字形流动背景：装饰性全屏层（z-index:-2），在应用根部挂载一次。
-// 随机种子每次进入图案不同；窗口失焦自动淡出；WebGL2 不可用时回退纯底色。
+// 参数对齐插件 0.1.2 实测基准：固定种子 0x19a4c637、look mixed、
+// interactive false、timing {fadeIn:3000, fadeOut:500}；其余引擎参数原样使用。
 export default function DynamicBackground() {
   const ref = useRef(null);
 
@@ -14,15 +16,13 @@ export default function DynamicBackground() {
     try {
       instance = GlyphWind.create({
         element: el,
-        settings: () => {
-          const buf = new Uint32Array(1);
-          crypto.getRandomValues(buf);
-          return Object.assign(GlyphWind.defaults(), {
-            seed: buf[0] || 0x19a4c637, // 每次进入随机图案
+        settings: () =>
+          Object.assign(GlyphWind.defaults(), {
+            seed: 0x19a4c637, // 基准固定种子，图案可复现
+            look: 'mixed',
             interactive: false, // 纯装饰：不绑定指针事件，不拦截任何点击
-          });
-        },
-        timing: () => ({ fadeIn: 2000, fadeOut: 500 }),
+          }),
+        timing: () => ({ fadeIn: 3000, fadeOut: 500 }),
         onReady: () => {
           // 尊重系统「减少动态效果」偏好：保持静止
           if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

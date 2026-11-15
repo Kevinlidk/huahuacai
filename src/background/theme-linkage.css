@@ -1,0 +1,43 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * GlyphWind 动态背景 × 浅/深主题联动基准(AppVersion 项目实测参数,可直接拷入宿主)
+ *
+ * 用法:拷入宿主样式,放在 engine.css 之后即可。
+ * 约定:
+ *   - 画布自身透明,底色由 html 的 --page-bg 提供(浅 #f4f6fb / 深 #333)
+ *   - 引擎每帧读取 #bg-stage 的 computed color 作为字形墨色,
+ *     所以墨色只在 CSS 变量里改,切换主题即时生效,无需动 JS
+ *   - 两种主题动效参数完全一致,仅切换画布底色与墨色
+ * ──────────────────────────────────────────────────────────────────────────── */
+:root {
+  --page-bg: #f4f6fb;   /* 浅色页面底(=画布底色) */
+  --bg-ink:  #6b7688;   /* 浅色字形墨色 */
+  --haze: none;         /* 浅色不加雾层 */
+}
+
+html[data-theme="dark"] {
+  --page-bg: #333;      /* 深色页面底:#333 + 白色薄雾层 */
+  --bg-ink:  #8a93a0;   /* 深色字形墨色 */
+  --haze: linear-gradient(rgba(255, 255, 255, .10), rgba(255, 255, 255, .04));
+}
+
+html {
+  background: var(--page-bg);
+}
+
+/* 背景墨色:引擎每帧读取 #bg-stage 的 computed color,切换主题即时生效
+ * (覆盖 engine.css 里的默认 color:#8a93a0) */
+#bg-stage { color: var(--bg-ink); }
+
+/* 白雾高光层:仅深色主题启用,叠在画布(z-index:-2)之上、内容之下 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--haze);
+}
+
+/* 移动端浏览器地址栏配色跟随(浅 #f4f6fb / 深 #333):
+ * <meta name="theme-color" content="#f4f6fb">
+ * 切换主题时在 JS 里同步: meta.content = dark ? "#333" : "#f4f6fb"; */

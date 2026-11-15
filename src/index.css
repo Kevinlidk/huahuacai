@@ -1,10 +1,7 @@
 @import "tailwindcss";
 
-/* 页面底色：字形流动背景（#bg-stage，z-index:-2）绘制其上，
-   内容卡片均为实色底保证可读性 */
-html {
-  background: #f4f6fb;
-}
+/* 页面底色与背景墨色由 theme-linkage.css 的 --page-bg/--bg-ink 变量统一提供
+   （见 src/background/theme-linkage.css），内容卡片均为实色底保证可读性 */
 
 /* 揭晓信封动画 */
 @keyframes hhc-rise {
