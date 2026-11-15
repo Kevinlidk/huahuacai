@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { composeReveal } from '../lib/strokes.js';
 
 // 结果揭晓：四格全部完成后，信封动画展开完整拼图
-export default function ResultReveal({ room, onReset }) {
+export default function ResultReveal({ room, onReset, onClose }) {
   // 揭晓后四格笔迹已冻结（reset 会卸载本组件），合成图只需计算一次；
   // room 来自轮询、每秒都是新引用，不能作为依赖，否则每秒重绘 1600×1600 位图
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,7 +48,13 @@ export default function ResultReveal({ room, onReset }) {
                 onClick={handleSave}
                 className="flex-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold py-2.5 transition"
               >
-                ⬇ 保存图片
+                ⬇ 保存
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold py-2.5 transition"
+              >
+                回看网格
               </button>
               <button
                 onClick={onReset}

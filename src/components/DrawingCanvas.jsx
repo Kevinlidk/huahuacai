@@ -8,6 +8,7 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrokes, onClose }) {
   // initialStrokes 只在挂载时取一次，之后的差异全部由本地操作驱动
   const [strokes, setStrokes] = useState(() => [...initialStrokes]);
+  const [redoStack, setRedoStack] = useState([]); // 被撤销的笔触，重做时按序放回
   const [tool, setTool] = useState('pen');
   const [colorIdx, setColorIdx] = useState(0);
   const [sizeIdx, setSizeIdx] = useState(1);
@@ -101,6 +102,7 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
     const stroke = currentRef.current;
     currentRef.current = null;
     if (stroke.points.length < 2) return;
+    setRedoStack([]); // 新笔触入栈后重做历史作废
     setStrokes((s) => [...s, stroke]);
     api
       .addStroke(roomId, canvasId, playerId, stroke)
@@ -109,8 +111,34 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
 
   const handleUndo = () => {
     if (strokes.length === 0) return;
+    const last = strokes[strokes.length - 1];
+    setRedoStack((s) => [...s, last]);
     setStrokes((s) => s.slice(0, -1));
     api.undo(roomId, canvasId, playerId).catch((e) => setError(e.message));
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const st = redoStack[redoStack.length - 1];
+    setRedoStack((s) => s.slice(0, -1));
+    setStrokes((s) => [...s, st]);
+    api.addStroke(roomId, canvasId, playerId, st).catch((e) => setError(e.message));
+  };
+
+  const handleClear = async () => {
+    if (strokes.length === 0 || busy) return;
+    if (!window.confirm('清空本格所有笔迹？')) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.clear(roomId, canvasId, playerId);
+      setStrokes([]);
+      setRedoStack([]);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleFinish = async () => {
@@ -199,6 +227,20 @@ export default function DrawingCanvas({ roomId, canvasId, playerId, initialStrok
             className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 transition"
           >
             ↩ 撤销
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 transition"
+          >
+            ↪ 重做
+          </button>
+          <button
+            onClick={handleClear}
+            disabled={strokes.length === 0 || busy}
+            className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-rose-500 transition"
+          >
+            🗑 清空
           </button>
           <button
             onClick={handleAbandon}

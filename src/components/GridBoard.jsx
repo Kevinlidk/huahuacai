@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { paintCell } from '../lib/strokes.js';
 
 const STATUS_TEXT = {
@@ -69,26 +69,62 @@ function Cell({ n, canvas, playerId, onClick }) {
   );
 }
 
-export default function GridBoard({ room, playerId, onCellClick, onReveal, onRelease }) {
+export default function GridBoard({ room, playerId, onCellClick, onReveal, onRelease, onEditName, onShowReveal }) {
   const cells = [1, 2, 3, 4].map((n) => ({ n, canvas: room.canvases[String(n)] }));
   const allDone = cells.every(({ canvas }) => canvas.status === 'done');
   const myDrawing = cells.find(({ canvas }) => canvas.status === 'drawing' && canvas.artistId === playerId);
+  const myName = room.players[playerId]?.name || '';
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+
+  const commitName = () => {
+    if (!editingName) return; // Enter 提交后失焦可能再触发一次，幂等保护
+    setEditingName(false);
+    if (nameDraft.trim() && nameDraft.trim() !== myName) onEditName(nameDraft);
+  };
 
   return (
     <section className="mx-auto w-full px-4 py-4 flex flex-col items-center">
-      {/* 在场玩家 */}
-      <div className="flex flex-wrap justify-center gap-2 mb-4">
-        {Object.entries(room.players).map(([pid, p]) => (
-          <span
-            key={pid}
-            className={`text-xs px-2.5 py-1 rounded-full ${
-              pid === playerId ? 'bg-sky-500 text-white' : 'bg-white text-slate-500 shadow-sm'
-            }`}
-          >
-            {p.name}
-            {pid === playerId ? '（我）' : ''}
-          </span>
-        ))}
+      {/* 在场玩家（点自己的芯片可改昵称） */}
+      <div className="flex flex-wrap justify-center gap-2 mb-4 items-center">
+        {Object.entries(room.players).map(([pid, p]) =>
+          pid === playerId && editingName ? (
+            <input
+              key={pid}
+              autoFocus
+              onFocus={(e) => e.target.select()}
+              value={nameDraft}
+              maxLength={24}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitName();
+                if (e.key === 'Escape') setEditingName(false);
+              }}
+              className="text-xs px-2.5 py-1 rounded-full border-2 border-sky-300 w-32 focus:outline-none focus:border-sky-500"
+              placeholder="新昵称"
+            />
+          ) : pid === playerId ? (
+            <button
+              key={pid}
+              onClick={() => {
+                setNameDraft(myName);
+                setEditingName(true);
+              }}
+              title="点击修改昵称"
+              className="text-xs px-2.5 py-1 rounded-full bg-sky-500 text-white hover:bg-sky-600 transition"
+            >
+              {p.name}（我）✏
+            </button>
+          ) : (
+            <span
+              key={pid}
+              className="text-xs px-2.5 py-1 rounded-full bg-white text-slate-500 shadow-sm"
+            >
+              {p.name}
+            </span>
+          )
+        )}
       </div>
 
       {/* 网格尺寸自适应：取「视口宽 92%」与「可用高度」较小者，上限 860px */}
@@ -105,7 +141,14 @@ export default function GridBoard({ room, playerId, onCellClick, onReveal, onRel
       </div>
 
       <div className="mt-5 text-center space-y-3">
-        {allDone ? (
+        {room.status === 'revealed' ? (
+          <button
+            onClick={onShowReveal}
+            className="rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold px-8 py-3 shadow transition hhc-pop"
+          >
+            🎨 查看拼图作品
+          </button>
+        ) : allDone ? (
           <button
             onClick={onReveal}
             className="rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold px-8 py-3 shadow transition hhc-pop"

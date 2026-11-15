@@ -37,3 +37,24 @@ export function setPlayerName(name) {
     /* 忽略存储失败 */
   }
 }
+
+const RECENT_KEY = 'hhc_recent_rooms';
+
+export function getRecentRooms() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((r) => r && typeof r.roomId === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addRecentRoom(roomId, name) {
+  try {
+    const list = getRecentRooms().filter((r) => r.roomId !== roomId);
+    list.unshift({ roomId, name: String(name || '').slice(0, 24), ts: Date.now() });
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 5)));
+  } catch {
+    /* 忽略存储失败 */
+  }
+}

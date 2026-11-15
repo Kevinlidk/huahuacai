@@ -29,6 +29,8 @@ export const api = {
     request(`/api/rooms/${roomId}/strokes`, { method: 'POST', body: { canvasId, playerId, stroke } }),
   undo: (roomId, canvasId, playerId) =>
     request(`/api/rooms/${roomId}/undo`, { method: 'POST', body: { canvasId, playerId } }),
+  clear: (roomId, canvasId, playerId) =>
+    request(`/api/rooms/${roomId}/clear`, { method: 'POST', body: { canvasId, playerId } }),
   finish: (roomId, canvasId, playerId) =>
     request(`/api/rooms/${roomId}/finish`, { method: 'POST', body: { canvasId, playerId } }),
   release: (roomId, canvasId, playerId) =>

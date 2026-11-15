@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { getPlayerId, getPlayerName } from '../lib/session.js';
+import { addRecentRoom, getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
 import { useRoomSync } from '../hooks/useRoomSync.js';
 import GridBoard from './GridBoard.jsx';
 import DrawingCanvas from './DrawingCanvas.jsx';
@@ -29,10 +29,18 @@ export default function Room() {
   const roomId = (rawRoomId || '').toUpperCase();
   const navigate = useNavigate();
   const [playerId] = useState(getPlayerId());
-  const [name] = useState(getPlayerName());
+  const [name, setName] = useState(getPlayerName());
   const { room, error, refresh } = useRoomSync(roomId);
   const [activeCanvas, setActiveCanvas] = useState(null);
+  const [revealVisible, setRevealVisible] = useState(true);
   const [notice, setNotice] = useState('');
+
+  // 进入房间即记录到「最近的房间」（Home 页快捷入口）
+  useEffect(() => {
+    if (roomId) addRecentRoom(roomId, name);
+    // 仅挂载时记录一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
 
   // 房间不存在时回首页
   useEffect(() => {
@@ -62,6 +70,19 @@ export default function Room() {
       refresh();
     }
   }, [room, activeCanvas, playerId, refresh]);
+
+  // 揭晓状态出现时默认弹出作品；reset 后随状态自动消失
+  useEffect(() => {
+    if (room?.status === 'revealed') setRevealVisible(true);
+  }, [room?.status]);
+
+  const handleEditName = (newName) => {
+    const nn = String(newName || '').trim().slice(0, 24);
+    if (!nn || nn === name) return;
+    setPlayerName(nn);
+    setName(nn);
+    setNotice('昵称已更新');
+  };
 
   const handleCopyInvite = () => {
     const link = `${window.location.origin}/room/${roomId}`;
@@ -157,31 +178,32 @@ export default function Room() {
         </div>
       </header>
 
-      {room.status === 'revealed' ? (
-        <ResultReveal room={room} onReset={handleReset} />
-      ) : (
-        <>
-          <GridBoard
-            room={room}
-            playerId={playerId}
-            onCellClick={handleCellClick}
-            onReveal={handleReveal}
-            onRelease={handleRelease}
-          />
-          {activeCanvas && (
-            <DrawingCanvas
-              key={activeCanvas}
-              roomId={roomId}
-              canvasId={activeCanvas}
-              playerId={playerId}
-              initialStrokes={room.canvases[String(activeCanvas)]?.strokes || []}
-              onClose={() => {
-                setActiveCanvas(null);
-                refresh();
-              }}
-            />
-          )}
-        </>
+      <GridBoard
+        room={room}
+        playerId={playerId}
+        onCellClick={handleCellClick}
+        onReveal={handleReveal}
+        onRelease={handleRelease}
+        onEditName={handleEditName}
+        onShowReveal={() => setRevealVisible(true)}
+      />
+
+      {room.status !== 'revealed' && activeCanvas && (
+        <DrawingCanvas
+          key={activeCanvas}
+          roomId={roomId}
+          canvasId={activeCanvas}
+          playerId={playerId}
+          initialStrokes={room.canvases[String(activeCanvas)]?.strokes || []}
+          onClose={() => {
+            setActiveCanvas(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {room.status === 'revealed' && revealVisible && (
+        <ResultReveal room={room} onReset={handleReset} onClose={() => setRevealVisible(false)} />
       )}
 
       {notice && (

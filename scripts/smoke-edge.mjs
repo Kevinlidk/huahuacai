@@ -148,6 +148,20 @@ let roomId;
   check('心跳不存在房间返回404', status === 404);
 }
 
+// ===== 3.5 清空画板 =====
+{
+  await call(`/rooms/${roomId}/claim`, { canvasId: 2, ...A });
+  await call(`/rooms/${roomId}/strokes`, { canvasId: 2, playerId: A.playerId, stroke: stroke() });
+  await call(`/rooms/${roomId}/strokes`, { canvasId: 2, playerId: A.playerId, stroke: stroke() });
+  const { status, data } = await call(`/rooms/${roomId}/clear`, { canvasId: 2, playerId: A.playerId });
+  check('画主清空→笔数0', status === 200 && data?.count === 0);
+  const u = await call(`/rooms/${roomId}/undo`, { canvasId: 2, playerId: A.playerId });
+  check('清空后撤销被拒(409)', u.status === 409);
+  const c = await call(`/rooms/${roomId}/clear`, { canvasId: 2, playerId: B.playerId });
+  check('非画主清空被拒(403)', c.status === 403);
+  await call(`/rooms/${roomId}/release`, { canvasId: 2, playerId: A.playerId });
+}
+
 // ===== 4. 释放/接管 =====
 {
   // 甲认领 2 并画一笔后自己释放 → 清空

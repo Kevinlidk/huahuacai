@@ -201,7 +201,7 @@ export async function handleApi(request, storage) {
     }
 
     // /api/rooms/:id/<action>
-    const mAction = path.match(/^\/api\/rooms\/([A-Za-z0-9]{4,6})\/(claim|strokes|undo|finish|release|reveal|reset|heartbeat)$/);
+    const mAction = path.match(/^\/api\/rooms\/([A-Za-z0-9]{4,6})\/(claim|strokes|undo|finish|release|reveal|reset|clear|heartbeat)$/);
     if (mAction && method === 'POST') {
       const roomId = mAction[1].toUpperCase();
       const action = mAction[2];
@@ -263,6 +263,18 @@ export async function handleApi(request, storage) {
         canvas.updatedAt = now();
         await storage.put(keyCanvas(roomId, canvasId), canvas);
         return json({ ok: true, count: canvas.strokes.length });
+      }
+
+      // 清空自己画板的全部笔迹（保留认领状态，与「撤销」逐笔回退互补）
+      if (action === 'clear') {
+        if (!isValidPlayerId(playerId)) fail(400, 'bad_player', '玩家 ID 不合法');
+        const canvasId = Number(body.canvasId);
+        if (!CANVAS_IDS.includes(canvasId)) fail(400, 'bad_canvas', '画板编号需为 1-4');
+        const canvas = await getOwnedDrawingCanvas(storage, roomId, canvasId, playerId);
+        canvas.strokes = [];
+        canvas.updatedAt = now();
+        await storage.put(keyCanvas(roomId, canvasId), canvas);
+        return json({ ok: true, count: 0 });
       }
 
       // 完成画板

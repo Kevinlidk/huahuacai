@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
+import { getRecentRooms, getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -9,6 +9,7 @@ export default function Home() {
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [recentRooms] = useState(getRecentRooms);
 
   const go = (roomId) => navigate(`/room/${roomId}`);
 
@@ -26,13 +27,7 @@ export default function Home() {
     }
   };
 
-  const join = async (e) => {
-    e.preventDefault();
-    const code = joinCode.trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,6}$/.test(code)) {
-      setError('房间号为 4-6 位大写字母或数字');
-      return;
-    }
+  const joinRoom = async (code) => {
     setBusy(true);
     setError('');
     try {
@@ -44,6 +39,16 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const join = async (e) => {
+    e.preventDefault();
+    const code = joinCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,6}$/.test(code)) {
+      setError('房间号为 4-6 位大写字母或数字');
+      return;
+    }
+    await joinRoom(code);
   };
 
   return (
@@ -99,6 +104,32 @@ export default function Home() {
           </form>
 
           {error && <p className="text-sm text-rose-500 text-center">{error}</p>}
+
+          {recentRooms.length > 0 && (
+            <div className="pt-1 border-t border-slate-100">
+              <p className="text-xs text-slate-400 mt-4 mb-2 text-left">最近的房间</p>
+              <div className="flex flex-wrap gap-2">
+                {recentRooms.map((r) => {
+                  const d = new Date(r.ts);
+                  return (
+                    <button
+                      key={r.roomId}
+                      onClick={() => joinRoom(r.roomId)}
+                      disabled={busy}
+                      className="group flex flex-col items-start px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 disabled:opacity-50 transition text-left"
+                    >
+                      <span className="font-mono font-bold tracking-widest text-slate-700 group-hover:text-sky-600">
+                        {r.roomId}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {r.name || '无名画友'} · {d.getMonth() + 1}/{d.getDate()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400">
