@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { api } from '../lib/api.js';
 import { addRecentRoom, getPlayerId, getPlayerName, setPlayerName } from '../lib/session.js';
 import { getSyncConfig, onSyncConfigChange } from '../lib/sync-config.js';
@@ -35,6 +36,8 @@ export default function Room() {
   const { room, error, refresh } = useRoomSync(roomId);
   const [activeCanvas, setActiveCanvas] = useState(null);
   const [revealVisible, setRevealVisible] = useState(true);
+  const [qrVisible, setQrVisible] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
   const [notice, setNotice] = useState('');
 
   // 进入房间即记录到「最近的房间」（Home 页快捷入口）
@@ -87,6 +90,20 @@ export default function Room() {
     setName(nn);
     setNotice('昵称已更新');
   };
+
+  // 打开扫码弹窗时离线生成邀请二维码（无外部请求，局域网自托管同样可用）
+  useEffect(() => {
+    if (!qrVisible) return;
+    const link = `${window.location.origin}/room/${roomId}`;
+    QRCode.toDataURL(link, {
+      width: 520,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#1f2937', light: '#ffffff' },
+    })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(''));
+  }, [qrVisible, roomId]);
 
   const handleCopyInvite = () => {
     const link = `${window.location.origin}/room/${roomId}`;
@@ -169,13 +186,25 @@ export default function Room() {
         </button>
         <div className="text-center">
           <p className="text-xs text-slate-400">房间号（点击复制）</p>
-          <button
-            onClick={handleCopyInvite}
-            className="font-mono text-2xl font-bold tracking-widest text-slate-800 hover:text-sky-600 transition"
-            title="复制邀请链接"
-          >
-            {roomId}
-          </button>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={handleCopyInvite}
+              className="font-mono text-2xl font-bold tracking-widest text-slate-800 hover:text-sky-600 transition"
+              title="复制邀请链接"
+            >
+              {roomId}
+            </button>
+            <button
+              onClick={() => setQrVisible(true)}
+              className="text-slate-400 hover:text-sky-600 transition"
+              title="手机扫码加入"
+              aria-label="手机扫码加入"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm10-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2-2h2v2h-2v-2zm0 4h2v2h-2v-2zm-4 0h.01v2H17v-2zM13 13h.01v2H13v-2zm4-4h.01v2H17V9zm2 0h2v2h-2V9zm-6 6h.01v2H13v-2z" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div className="text-right text-sm text-slate-500">
           {Object.keys(room.players).length} 人在线
@@ -214,6 +243,44 @@ export default function Room() {
       {notice && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-sm px-4 py-2 rounded-full shadow-lg hhc-pop">
           {notice}
+        </div>
+      )}
+
+      {qrVisible && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setQrVisible(false)}
+        >
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl p-5 w-full max-w-xs text-center hhc-pop"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setQrVisible(false)}
+              className="absolute top-2 right-3 text-slate-300 hover:text-slate-500 text-xl leading-none"
+              aria-label="关闭二维码"
+            >
+              ×
+            </button>
+            <p className="text-sm font-semibold text-slate-700 mb-1">手机扫码加入</p>
+            <p className="text-xs text-slate-400 mb-3">
+              用手机相机或微信扫一扫，进入房间 <span className="font-mono font-bold">{roomId}</span>
+            </p>
+            {qrDataUrl ? (
+              <img
+                src={qrDataUrl}
+                alt={`房间 ${roomId} 的加入二维码`}
+                className="mx-auto w-56 h-56 rounded-lg border border-slate-100"
+              />
+            ) : (
+              <div className="mx-auto w-56 h-56 rounded-lg border border-slate-100 flex items-center justify-center text-sm text-slate-400">
+                二维码生成中…
+              </div>
+            )}
+            <p className="mt-3 text-[11px] text-slate-300 break-all select-all">
+              {typeof window !== 'undefined' ? `${window.location.origin}/room/${roomId}` : ''}
+            </p>
+          </div>
         </div>
       )}
     </main>
