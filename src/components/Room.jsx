@@ -179,7 +179,7 @@ export default function Room() {
       <header className="max-w-3xl mx-auto flex items-center justify-between px-4 pt-5">
         <button
           onClick={() => navigate('/')}
-          className="text-slate-400 hover:text-slate-600 transition"
+          className="rounded-lg border border-slate-300 bg-white/70 px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 hover:border-slate-400 transition"
           title="返回首页"
         >
           ← 退出
@@ -206,7 +206,12 @@ export default function Room() {
             </button>
           </div>
         </div>
-        <div className="text-right text-sm text-slate-500">
+        <div className="flex items-center gap-1.5 text-sm text-slate-500">
+          {/* 呼吸绿点：外圈 ping 涟漪 + 实心圆心 */}
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </span>
           {Object.keys(room.players).length} 人在线
         </div>
       </header>
